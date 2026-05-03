@@ -46,11 +46,11 @@ Plans:
   2. User closes and reopens the app and remains logged in (JWT stored in expo-secure-store, refresh token cycle working)
   3. User taps Log Out and is returned to the phone number entry screen; subsequent API calls with the old token are rejected
   4. Sending more than 3 OTP requests from the same IP within 60 seconds is rejected with a 429 response (OTP bombing protection active)
-  5. MSG91 DLT template registration has been submitted (required for Indian SMS delivery; approval takes days to weeks)
+  5. OTP mock mode active (`MOCK_OTP=true`): any phone number accepts code `123456`; switching `MOCK_OTP=false` routes through real MSG91 (swap before production)
 **Plans**: TBD
 
 Plans:
-- [ ] 02-01: Auth API — /auth/send-otp, /auth/verify-otp, /auth/refresh, /auth/logout endpoints with slowapi rate limiting and MSG91 spend cap configured
+- [ ] 02-01: Auth API — /auth/send-otp, /auth/verify-otp, /auth/refresh, /auth/logout endpoints with slowapi rate limiting; OTP is mocked (hardcoded `123456` behind `MOCK_OTP=true` env flag) for MVP — swap to real MSG91 before production
 - [ ] 02-02: RN Auth screens — Phone entry screen, OTP verification screen, JWT stored in expo-secure-store, auth state machine, session restoration on app start
 
 ### Phase 3: Listing Creation

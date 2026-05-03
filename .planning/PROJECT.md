@@ -57,6 +57,7 @@ A seller can list their 2-wheeler in under 5 minutes, and a buyer can find and e
 | Railway over AWS for MVP | AWS adds DevOps complexity before product-market fit; Railway is < $20/month with one deploy command | — Pending |
 | Cloudinary for images | Handles upload, resize, CDN delivery, and basic optimization — replaces S3 + Celery + Redis for MVP | — Pending |
 | MSG91 for OTP | Indian provider, cheap, reliable, widely used in production apps | — Pending |
+| Mock OTP for MVP | Skip MSG91 DLT registration complexity during development; hardcode OTP (e.g. `123456`) with a config flag — swap to real MSG91 before production launch | — Pending |
 | PostgreSQL over Firestore | Relational queries, future PostGIS for radius search, familiar for structured marketplace data | — Pending |
 | Buyer-seller contact deferred | Core value is discovery, not communication — avoid scope creep on v1 | — Pending |
 
