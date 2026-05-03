@@ -88,36 +88,34 @@
 
 ## Traceability
 
-*To be populated during roadmap creation.*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| AUTH-04 | — | Pending |
-| LIST-01 | — | Pending |
-| LIST-02 | — | Pending |
-| LIST-03 | — | Pending |
-| LIST-04 | — | Pending |
-| LIST-05 | — | Pending |
-| LIST-06 | — | Pending |
-| LIST-07 | — | Pending |
-| LIST-08 | — | Pending |
-| BROW-01 | — | Pending |
-| BROW-02 | — | Pending |
-| BROW-03 | — | Pending |
-| DETL-01 | — | Pending |
-| DETL-02 | — | Pending |
-| DETL-03 | — | Pending |
-| SMGR-01 | — | Pending |
-| SMGR-02 | — | Pending |
+| AUTH-01 | Phase 4 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| AUTH-04 | Phase 2 | Pending |
+| LIST-01 | Phase 3 | Pending |
+| LIST-02 | Phase 3 | Pending |
+| LIST-03 | Phase 3 | Pending |
+| LIST-04 | Phase 3 | Pending |
+| LIST-05 | Phase 5 | Pending |
+| LIST-06 | Phase 5 | Pending |
+| LIST-07 | Phase 5 | Pending |
+| LIST-08 | Phase 5 | Pending |
+| BROW-01 | Phase 4 | Pending |
+| BROW-02 | Phase 4 | Pending |
+| BROW-03 | Phase 4 | Pending |
+| DETL-01 | Phase 4 | Pending |
+| DETL-02 | Phase 4 | Pending |
+| DETL-03 | Phase 4 | Pending |
+| SMGR-01 | Phase 5 | Pending |
+| SMGR-02 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 20 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-03*
-*Last updated: 2026-05-03 after initial definition*
+*Last updated: 2026-05-03 after roadmap creation*
