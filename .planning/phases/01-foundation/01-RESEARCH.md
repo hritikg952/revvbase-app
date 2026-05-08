@@ -902,17 +902,17 @@ async def health():
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Railway PostGIS template plan requirement**
+1. **Railway PostGIS template plan requirement** (RESOLVED)
    - What we know: Railway's standard Postgres doesn't include PostGIS; a PostGIS template exists
    - What's unclear: Whether the PostGIS template is available on the Hobby plan or requires Pro
-   - Recommendation: Verify at `railway.com/deploy/postgis` before provisioning. If Hobby plan doesn't support it, the alternative is: provision standard Postgres + run `ALTER ROLE <user> SUPERUSER` from Railway's psql console (some users report this works). Document in plan as a manual verification step.
+   - **Resolution:** The PostGIS template at `railway.com/deploy/postgis` is available on the Hobby plan. Plan 01-01 captures this as a manual user setup step with explicit instructions to select the PostGIS template at service creation time.
 
-2. **Auth guard bottom sheet library**
+2. **Auth guard bottom sheet library** (RESOLVED)
    - What we know: D-05 requires a bottom sheet modal for the auth guard
    - What's unclear: Which bottom sheet library to use (no library was specified in CONTEXT.md)
-   - Recommendation: Use `@gorhom/bottom-sheet` (the de facto standard for React Native bottom sheets, New Architecture compatible). This is Phase 1's only unspecified library dependency. Plan should include installing `@gorhom/bottom-sheet` + `react-native-gesture-handler` + `react-native-reanimated`.
+   - **Resolution:** `@gorhom/bottom-sheet@^5` selected (de facto standard, New Architecture compatible). Plan 01-03 Task 1 installs it alongside `react-native-gesture-handler` and `react-native-reanimated`. `AuthGateSheet.tsx` stub is created in Task 8 and wired into `RootNavigator.tsx` tab listeners.
 
 3. **monorepo — single Railway service vs. separate Railway service for frontend**
    - What we know: There is no frontend server; Expo apps are native bundles, not web servers. Railway only needs to host the FastAPI backend.
