@@ -1,4 +1,6 @@
-# Architecture Research
+# Architecture Research (Historical — superseded 2026-07-29)
+
+> This document describes the previous Expo + FastAPI + Railway direction. The active architecture is documented in `ARCHITECTURE-MVP.md`.
 
 **Domain:** Mobile-first second-hand vehicle marketplace (2-wheelers, India)
 **Researched:** 2026-05-03

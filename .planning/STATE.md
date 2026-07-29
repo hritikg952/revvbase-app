@@ -2,68 +2,59 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-03)
+See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 
-**Core value:** A seller can list their 2-wheeler in under 5 minutes, and a buyer can find and evaluate it from anywhere in India — no calls, no middlemen, no friction.
-**Current focus:** Phase 1 — Foundation
+**Core value:** A visitor can discover two-wheelers, and an authenticated user can publish a listing with the key details needed to start a sale.
+**Current focus:** Re-plan around a web MVP using Supabase.
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation)
-Plan: 0 of 3 in current phase
+Milestone: 1 of 5 (Supabase foundation)
 Status: Ready to plan
-Last activity: 2026-05-03 — Roadmap created, all 20 v1 requirements mapped across 5 phases
+Last activity: 2026-07-29 — product scope re-aligned from Expo/FastAPI/Railway to Next.js/React + Supabase.
 
 Progress: [░░░░░░░░░░] 0%
 
-## Performance Metrics
+## Existing implementation context
 
-**Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- The repository currently contains a partial FastAPI foundation under `backend/`.
+- That backend is historical scaffolding and is not the active target architecture for the revised MVP.
+- There is no frontend application yet.
+- No revised Supabase schema, RLS policies, or production deployment has been implemented.
+- No MVP requirement has been validated.
 
-**By Phase:**
+## Decisions
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
+- Public browsing does not require authentication.
+- Email/password is the first authentication method.
+- One account can both browse and list; there are no buyer/seller roles.
+- Listing CRUD is required; minimal management controls are allowed, but a polished seller dashboard is deferred.
+- Images are optional and use a stock placeholder initially.
+- Location is stored now; sophisticated location search is deferred.
+- No admin/moderation workflow in MVP.
+- Supabase is the planned backend; Railway is not required unless a later requirement demands a custom service.
 
-**Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+## Risks and open decisions
 
-*Updated after each plan completion*
+- Supabase email/password redirect URLs and production email configuration need to be defined during Milestone 2.
+- RLS policies are the primary security boundary and must be tested before public deployment.
+- Existing backend model fields need a deliberate SQL/Supabase migration rather than a blind copy.
+- The exact Next.js setup (App Router, styling, hosting provider) remains provisional.
 
-## Accumulated Context
+## Deferred items
 
-### Decisions
+| Item | Reason |
+|---|---|
+| Phone OTP / MSG91 | Not needed for MVP |
+| Railway/FastAPI deployment | Supabase covers MVP backend needs |
+| Image upload pipeline | Stock placeholder is sufficient initially |
+| Seller dashboard | CRUD matters; dedicated management UI can follow |
+| Search, filters, radius queries | Discovery sophistication after core loop validation |
+| Moderation and trust features | Need marketplace usage signal first |
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+## Session continuity
 
-- Roadmap: PostGIS extension + JSONB attributes column must be in migration 001 (Phase 1) — zero cost now, expensive to retrofit later
-- Roadmap: OTP rate limiting (slowapi) + MSG91 spend cap must be complete in Phase 2 before any public URL is accessible
-- Roadmap: Image uploads go device → Cloudinary directly via server-signed URL — Railway never proxies photo bytes
-- Roadmap: JWT stored in expo-secure-store exclusively — never AsyncStorage
-- Roadmap: Feed must use FlashList + memoized cards + keyset pagination (not FlatList, not offset) — defined as Phase 4 success criteria
+Next action: plan Milestone 1 in detail, then implement only after schema, RLS, auth, and frontend choices are agreed.
 
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-- Phase 2: MSG91 DLT template registration must be submitted early — approval takes days to weeks. Delay here can block Phase 2 completion.
-
-## Deferred Items
-
-| Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| *(none)* | | | |
-
-## Session Continuity
-
-Last session: 2026-05-04
-Stopped at: Phase 1 context gathered — repo structure, navigation shell, DB schema, design theming all decided.
-Resume file: .planning/phases/01-foundation/01-CONTEXT.md
+---
+*Updated 2026-07-29 after product re-alignment.*

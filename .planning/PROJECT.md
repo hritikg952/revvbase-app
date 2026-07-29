@@ -2,81 +2,63 @@
 
 ## What This Is
 
-Revvbase is a mobile-first second-hand 2-wheeler marketplace for India, where sellers can list their used motorcycles, scooters, electric 2-wheelers, and bicycles, and buyers can browse and view detailed listings. It is the "Spinny for 2-wheelers" — a single trusted destination for the segment that currently has no dedicated platform.
+Revvbase is a simple web marketplace for second-hand two-wheelers in India. A user can browse vehicles publicly, create an account, and list a motorcycle, scooter, electric two-wheeler, or bicycle for sale. The same account can act as both buyer and seller.
 
-## Core Value
+## MVP Core Value
 
-A seller can list their 2-wheeler in under 5 minutes, and a buyer can find and evaluate it from anywhere in India — no calls, no middlemen, no friction.
+A visitor can discover available two-wheelers, and an authenticated user can publish a vehicle listing with the key details needed to start a sale.
 
-## Requirements
+## MVP Scope
 
-### Validated
+- Public browsing without authentication.
+- Email/password sign-up, sign-in, session persistence, and sign-out.
+- One user model; no buyer/seller role split.
+- Authenticated seller can create, read, update, and delete their own listings.
+- Minimal management controls may be included so CRUD is usable; a polished seller dashboard is deferred.
+- Public page iterates over active listings and renders listing cards.
+- Optional image field with a stock-image fallback for UI development.
+- City/location field stored now, but sophisticated location search deferred.
+- A polished seller dashboard, moderation, messaging, contact reveal, and advanced discovery are deferred.
 
-(None yet — ship to validate)
+## Product Context
 
-### Active
-
-- [ ] User can sign up and log in via Phone OTP (MSG91)
-- [ ] Seller can create a vehicle listing with photos and full details
-- [ ] Listings appear on a browsable home screen
-- [ ] Buyer can view a full vehicle detail page
-- [ ] Seller can manage (edit/delete) their own listings
-- [ ] Listings include: vehicle type, make, model, year, odometer, price, city, fuel type, number of previous owners, insurance validity, and photos
-
-### Out of Scope
-
-- In-app buyer-seller contact / messaging — deferred to post-MVP; architecture must not block this
-- Filtering / search by specs or location radius — v2; PostGIS-ready DB from day 1
-- OCR document scanning for auto-fill — future AI feature
-- AI image optimization — future; Cloudinary handles basic transforms for MVP
-- Paperwork and ownership transfer system — long-term trust feature
-- Seller/buyer ratings and reviews — deferred post-MVP
-
-## Context
-
-- **Market:** India. No dedicated second-hand 2-wheeler marketplace exists at scale (OLX exists but is generic and untrustworthy; Cars24/Spinny only do cars).
-- **Users:** Mobile-first Indian users. Phone OTP is the standard auth pattern (familiar from WhatsApp, Paytm, etc.).
-- **Design:** Dark-mode design system already created (`design/`). Brand: Space Grotesk, Electric Red CTAs, Nitro Blue accents, tonal elevation without shadows.
-- **Vehicle types:** Motorcycles, Scooters, Electric 2-wheelers, Bicycles — all under one roof, categorized.
-- **Trust signal for MVP:** Phone verification via OTP login. Explicit trust features (inspection, ratings, document verification) are future work.
+- Market: India.
+- Vehicle types: motorcycle, scooter, electric two-wheeler, bicycle.
+- The first release validates the basic supply-and-demand loop, not trust, messaging, or pricing intelligence.
+- A seller dashboard is architecturally allowed but is not part of the first public MVP.
 
 ## Constraints
 
-- **Platform:** React Native (New Architecture) — Android + iOS from one codebase
-- **Budget:** Target < $20/month for MVP infrastructure (Railway for API + DB)
-- **Stack:** FastAPI (Python) + PostgreSQL + Cloudinary + MSG91 — chosen for simplicity, low cost, and future scalability
-- **Scalability:** Database must be PostGIS-ready for future radius-based location search
-- **No DevOps complexity:** No managed Kubernetes, no ECS/Fargate — Railway deployment for MVP
+- Platform: responsive web application.
+- Frontend direction: simple React/Next.js application.
+- Backend direction: Supabase hosted PostgreSQL, Auth, Row Level Security, and optionally Storage/Edge Functions.
+- Railway is not required for the MVP.
+- Keep infrastructure minimal; do not introduce a custom API server unless a concrete requirement requires it.
+- PostGIS-ready schema is desirable, but radius search is deferred.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| React Native over web-first | Indian users are mobile-first; app store presence builds trust | — Pending |
-| FastAPI over Node.js | Python ecosystem suits future AI/OCR features (same language); FastAPI is fast to build | — Pending |
-| Railway over AWS for MVP | AWS adds DevOps complexity before product-market fit; Railway is < $20/month with one deploy command | — Pending |
-| Cloudinary for images | Handles upload, resize, CDN delivery, and basic optimization — replaces S3 + Celery + Redis for MVP | — Pending |
-| MSG91 for OTP | Indian provider, cheap, reliable, widely used in production apps | — Pending |
-| Mock OTP for MVP | Skip MSG91 DLT registration complexity during development; hardcode OTP (e.g. `123456`) with a config flag — swap to real MSG91 before production launch | — Pending |
-| PostgreSQL over Firestore | Relational queries, future PostGIS for radius search, familiar for structured marketplace data | — Pending |
-| Buyer-seller contact deferred | Core value is discovery, not communication — avoid scope creep on v1 | — Pending |
+|---|---|---|
+| Web over Expo | Faster validation and simpler distribution for this marketplace MVP | Adopted |
+| Next.js/React direction | Simple, familiar web stack with room for SEO and server rendering later | Provisional |
+| Supabase over custom FastAPI + Railway | Auth, PostgreSQL, RLS, API access, and optional storage in one managed backend | Adopted for MVP planning |
+| Email/password auth | User explicitly does not need phone OTP yet | Adopted |
+| One user can buy and sell | Avoid role complexity until the marketplace behavior is validated | Adopted |
+| Direct Supabase client with RLS | Avoid a custom API layer for basic CRUD | Adopted for MVP planning |
+| Optional images | Vehicle data flow is the first validation; use stock imagery while image upload is deferred | Adopted |
+| Location stored, search deferred | Preserve future path to PostGIS without expanding MVP scope | Adopted |
+| Seller dashboard deferred | CRUD is required, but a dedicated management UI is not part of the first public MVP | Adopted |
+| Moderation deferred | No admin workflow until marketplace usage justifies it | Adopted |
 
-## Evolution
+## Deferred After MVP
 
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
-
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+- Seller dashboard and richer listing management UI.
+- Image upload and image management, if stock imagery is insufficient.
+- Filters, text search, and radius search.
+- Buyer-seller contact, WhatsApp, and messaging.
+- Moderation/admin tools.
+- Ratings, reviews, verification, OCR, price guidance, notifications, and paperwork assistance.
 
 ---
-*Last updated: 2026-05-03 after initialization*
+*Updated 2026-07-29 after product re-alignment.*
