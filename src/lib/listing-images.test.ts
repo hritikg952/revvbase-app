@@ -16,6 +16,7 @@ import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-clie
 import {
   getOrderedPhotoTiles,
   processListingPhotoSelection,
+  removeListingPhoto,
 } from "./listing-image-manager";
 
 const heicToMock = vi.hoisted(() => vi.fn());
@@ -309,6 +310,71 @@ describe("immediate listing photo uploads", () => {
     expect(result.images).toHaveLength(4);
     expect(normalize).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
+  });
+});
+
+describe("authoritative listing photo removal", () => {
+  const onlyPhoto = {
+    id: "image-1",
+    listingId: "listing-1",
+    storageKey: "opaque-image-key",
+    publicUrl: "https://cdn.example/image.webp",
+    position: 0,
+    createdAt: "2026-08-01T00:00:00.000Z",
+  };
+
+  it("removes the final tile and reports the server-returned draft status", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      action: "delete-image",
+      listingId: "listing-1",
+      status: "draft",
+    });
+
+    const result = await removeListingPhoto({
+      image: onlyPhoto,
+      images: [onlyPhoto],
+      listingId: "listing-1",
+      currentStatus: "active",
+      execute,
+    });
+
+    expect(execute).toHaveBeenCalledWith({
+      action: "delete-image",
+      listingId: "listing-1",
+      imageId: "image-1",
+      storageKey: "opaque-image-key",
+    });
+    expect(result).toEqual({
+      ok: true,
+      images: [],
+      status: "draft",
+      message:
+        "Photo removed. Your listing is now a draft until you add a photo and publish it again.",
+    });
+  });
+
+  it("keeps the ready tile and current status when protected deletion fails", async () => {
+    const result = await removeListingPhoto({
+      image: onlyPhoto,
+      images: [onlyPhoto],
+      listingId: "listing-1",
+      currentStatus: "active",
+      execute: vi.fn().mockRejectedValue(
+        new ListingImageLifecycleClientError(
+          "storage_remove_failed",
+          "provider detail",
+          true,
+          "active",
+        ),
+      ),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      images: [onlyPhoto],
+      status: "active",
+      message: "Photo could not be removed. It is still on your listing. Try again.",
+    });
   });
 });
 
