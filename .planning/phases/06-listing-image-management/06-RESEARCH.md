@@ -45,7 +45,7 @@ Public delivery is compatible with strict write access: a public bucket bypasses
 
 The selected 1 MB limit must be enforced **after** transformation—the actual stored file—not against the camera original. Browser Canvas can encode JPEG/WebP, but HEIC/HEIF is not a safe native decode assumption across all target browsers; the image normalizer needs a dynamically imported, reviewed HEIC decoder for those source files and must report a clear failure where conversion cannot run. The planner must include a human package-legitimacy checkpoint before selecting/installing that decoder, because registry metadata could not be verified in this research environment. [CITED: https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob]
 
-**Primary recommendation:** Build a client-only `normalizeListingImage()` pipeline that produces one WebP asset (long edge 2560 px; quality is stepped down until ≤1 MB), then persist it through an application-owned `ListingImageStorage` contract backed by a Supabase adapter; use `listing_images` metadata plus a database-enforced maximum-count trigger and a deletion RPC/service flow that removes real storage objects before deleting metadata/listing rows.
+**Primary recommendation:** Build a client-only `normalizeListingImage()` pipeline that produces one WebP asset (long edge 2560 px; quality is stepped down until ≤1 MB), then persist it through an application-owned `ListingImageStorage` contract backed by a Supabase adapter; use `listing_images` metadata plus a database-enforced maximum-count trigger and a protected cleanup flow that removes real storage objects before deleting metadata and setting the existing listing status to `deleted`.
 
 ## Architectural Responsibility Map
 
@@ -56,7 +56,7 @@ The selected 1 MB limit must be enforced **after** transformation—the actual s
 | Object bytes, stable public delivery | Database / Storage | CDN / Static | Supabase Storage owns object bytes; its public bucket delivers stable CDN-addressable URLs. |
 | Image metadata and cover ordering | Database / Storage | Browser / Client | `listing_images` is the durable one-to-many domain record; `created_at`/monotonic order determines cover. |
 | Owner authorization and cross-resource invariant | Database / Storage | API / Backend | RLS and database trigger/RPC enforce owner and max-count rules even if client-side checks are bypassed. |
-| Listing/image permanent cleanup | API / Backend | Database / Storage | A single application cleanup operation coordinates provider-object deletion with metadata/listing deletion; database cascades only remove metadata, not Storage bytes. |
+| Listing/image permanent cleanup | API / Backend | Database / Storage | A single application cleanup operation coordinates provider-object deletion with metadata deletion and the existing listing soft-delete status transition; database cascades only remove metadata, not Storage bytes. |
 | Static upload settings | Browser / Client | Database / Storage | Versioned JSON controls UX/normalizer; bucket/RLS/DB rules remain a deliberate deployment-side mirror. |
 
 ## Project Constraints (from AGENTS.md)
@@ -153,10 +153,10 @@ npm install <reviewed-heic-decoder> [<reviewed-compression-helper>]
               |
               +--> [public card selects first image] --> [stable CDN public URL]
 
-[remove image / delete listing]
+[remove image / soft-delete listing]
               |
               v
-[application cleanup service removes provider objects] --> [delete metadata / hard-delete listing]
+[application cleanup service removes provider objects] --> [delete metadata / set listing status deleted]
 ```
 
 ### Recommended Project Structure
@@ -314,10 +314,10 @@ The plan must add a documented deployment checklist: changing `maxPerListing`, `
 
 **How to avoid:** Add one narrow HTTPS `remotePatterns` rule for the project’s Supabase Storage public path. Next documents this as the restrictive current configuration. [CITED: https://nextjs.org/docs/app/api-reference/components/image]
 
-### Pitfall 7: Deletion semantics conflict with current soft delete
+### Pitfall 7: Image cleanup must preserve the current soft-delete listing lifecycle
 **What goes wrong:** Existing `MyListingCard` only sets `status = 'deleted'`, leaving public URLs and image objects indefinitely.
 
-**How to avoid:** Phase 6 must explicitly replace or redirect that operation to permanent cleanup/hard deletion for listings with images. It must not silently preserve the legacy soft-delete semantics.
+**How to avoid:** Phase 6 must route the owner action through protected image cleanup, permanently remove every image object and metadata row, then update the existing listing row to `status = 'deleted'`. Browser roles must not be able to perform that status transition directly. This preserves the established listing lifecycle while preventing orphaned public bytes.
 
 ## Code Examples
 
@@ -385,7 +385,7 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
 |---|---|---|
 | Optional `listings.image_url` string points at arbitrary external image | Ordered `listing_images` records point at application-owned canonical object keys/URLs | Reliable ownership, cleanup, and cover selection; remove legacy external URL as a source of truth. |
 | Plain dynamic `<img>` sourced from unbounded seller URL | Public provider URL with controlled host/path; optionally `next/image` with narrow remote pattern | Safer, cacheable, provider-swappable rendering boundary. |
-| Soft-delete listing row only | Coordinated provider object removal plus metadata/listing deletion | Meets permanent cleanup decision; requires explicit failure/retry UX. |
+| Soft-delete listing row only | Coordinated provider object removal plus metadata deletion, followed by protected listing soft delete | Meets permanent image-cleanup decision while preserving the listing lifecycle; requires explicit failure/retry UX. |
 
 **Deprecated/outdated:**
 
@@ -401,22 +401,13 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
 | A3 | 2560 px long edge and a 0.86→0.5 WebP quality range preserve adequate vehicle-detail zoom quality under 1 MB. | Primary recommendation / config | Real photos may need different quality/dimension tradeoffs; device/photo sample QA can tune static config without UI code changes. |
 | A4 | A 20 MB configurable input safety ceiling is reasonable for mobile-browser memory protection. | Pitfall 3 | It may reject useful camera files or still be too memory-intensive on low-end devices; tune after manual testing. |
 
-## Open Questions
+## Resolved Planning Decisions
 
-1. **How will deployment synchronize JSON settings and server-side limits?**
-   - What we know: D-10 correctly says client JSON cannot enforce authorization. Bucket file-size/type settings and DB count enforcement must match the config.
-   - What's unclear: Whether project deployments currently apply Supabase migrations automatically or manually.
-   - Recommendation: Make a phase plan task that adds a short configuration-change checklist and a migration-side mirror. A later operations phase can automate config-to-migration generation if repeated changes justify it.
+1. **Configuration deployment mirror — resolved.** A configuration change release is a paired change: update the versioned JSON consumed by browser validation/UX and the matching committed Supabase migration that mirrors canonical MIME, canonical byte cap, and count enforcement. The Phase 6 release gate checks this paired-change checklist before deployment. This fulfills D-09/D-10 without pretending browser JSON authorizes requests.
 
-2. **Which HEIC package passes the human checkpoint?**
-   - What we know: HEIC support requires a client decoder where native decode is unavailable; candidates could not be legitimized from this sandbox.
-   - What's unclear: Maintenance/license/bundle-size/device compatibility of the preferred package.
-   - Recommendation: Verify one candidate before implementation and add it through a client-only dynamic import. If none qualifies, accept JPEG/PNG/WebP everywhere and report HEIC conversion unavailable—this is permitted by “where technically supportable,” but must be surfaced before execution.
+2. **HEIC decoder — resolved to a human package-approval gate.** No package is preselected. The implementation installs exactly the package and version approved at the retained checkpoint, dynamically imports it only in the client normalizer, and keeps JPEG/PNG/WebP usable if a particular HEIC conversion fails. This fulfills D-05's "where technically supportable" boundary.
 
-3. **How should a listing delete recover from temporary provider deletion failure?**
-   - What we know: D-08 requires permanent cleanup; plain soft delete does not meet it.
-   - What's unclear: Whether the MVP needs a retryable pending-delete state or can keep the listing intact and report failure.
-   - Recommendation: Keep the listing/metadata intact when object deletion fails and show a retryable error. This avoids orphaning metadata or falsely claiming deletion; no new status is required for MVP.
+3. **Deletion recovery — resolved to protected retryable cleanup.** A JWT-validated Supabase Edge Function owns permanent photo removal and the listing soft-delete transition. It enumerates authoritative metadata, removes every object, deletes the corresponding metadata rows, then sets the existing listing row to `status = 'deleted'` using server authority. If object removal fails, it leaves the listing active and rows intact for retry; direct browser DELETE policies and direct browser deleted-status updates are denied so callers cannot bypass this sequence. This fulfills D-08 and prevents storage orphans.
 
 ## Environment Availability
 
