@@ -11,7 +11,6 @@ export type ListingImageNormalizationErrorCode =
   | "source-too-large"
   | "source-dimensions-too-large"
   | "decode-failed"
-  | "heic-decoder-unavailable"
   | "encode-failed"
   | "cannot-fit";
 
@@ -142,6 +141,35 @@ function qualities(settings: AppSettings): number[] {
   return [...new Set(values)];
 }
 
+function isImageBitmapLike(value: unknown): value is ImageBitmap {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<ImageBitmap>;
+  return (
+    typeof candidate.width === "number" &&
+    typeof candidate.height === "number" &&
+    typeof candidate.close === "function"
+  );
+}
+
+async function decodeSourceBitmap(
+  file: File,
+  sourceMimeType: ListingImageSourceMimeType,
+): Promise<ImageBitmap> {
+  if (sourceMimeType === "image/heic" || sourceMimeType === "image/heif") {
+    const { heicTo } = await import("heic-to");
+    const decoded = await heicTo({ blob: file, type: "bitmap" });
+    if (!isImageBitmapLike(decoded)) {
+      throw new Error("The HEIC decoder did not return a bitmap.");
+    }
+    return decoded;
+  }
+
+  if (typeof createImageBitmap !== "function") {
+    throw new Error("This browser cannot decode image files.");
+  }
+  return createImageBitmap(file);
+}
+
 /**
  * Converts one untrusted browser file into the only asset accepted by storage.
  * The original is decoded and re-encoded but never returned or persisted.
@@ -177,27 +205,9 @@ export async function normalizeListingImage(
     );
   }
 
-  // This branch is deliberately isolated. Plan 06-01 stops for legitimacy review
-  // before wiring a dynamically imported HEIC/HEIF decoder into this boundary.
-  if (sourceMimeType === "image/heic" || sourceMimeType === "image/heif") {
-    return failure(
-      file,
-      "heic-decoder-unavailable",
-      `${file.name} could not be converted on this device. Choose another supported photo file.`,
-    );
-  }
-
-  if (typeof createImageBitmap !== "function") {
-    return failure(
-      file,
-      "decode-failed",
-      `${file.name} could not be used. Choose a supported photo file.`,
-    );
-  }
-
   let bitmap: ImageBitmap;
   try {
-    bitmap = await createImageBitmap(file);
+    bitmap = await decodeSourceBitmap(file, sourceMimeType);
   } catch {
     return failure(
       file,
