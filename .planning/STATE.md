@@ -5,13 +5,13 @@
 See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 
 **Core value:** A visitor can discover two-wheelers, and an authenticated user can publish a listing with the key details needed to start a sale.
-**Current focus:** Milestone completion audit.
+**Current focus:** MVP maintenance and local operation.
 
 ## Current Position
 
 Phase: 5 of 5 (MVP validation)
 Status: Complete and verified
-Last activity: 2026-08-01 — Full local-browser and hosted-Supabase MVP acceptance passed; synthetic UAT data removed.
+Last activity: 2026-08-01 — Completed quick task 260801-fjg: shared human-and-agent startup runbook.
 
 Progress: [██████████] 100%
 
@@ -54,9 +54,15 @@ Progress: [██████████] 100%
 | Moderation and trust features | Need marketplace usage signal first |
 | Production hosting and smoke test | Explicitly deferred by the user on 2026-07-30 |
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|---|---|---|---|
+| 260801-fjg | Create a startup runbook for humans and agents | 2026-08-01 | 00372ec | [260801-fjg-create-a-startup-runbook-for-humans-and-](./quick/260801-fjg-create-a-startup-runbook-for-humans-and-/) |
+
 ## Session continuity
 
-Next action: run the GSD milestone audit. When the user later re-enables hosting, create a new deployment phase, add its origin to Supabase Auth configuration, and run a production smoke test.
+Next action: use `START-HERE.md` for local startup and maintenance. When the user later re-enables hosting, create a new deployment phase, add its origin to Supabase Auth configuration, and run a production smoke test.
 
 ---
-*Updated 2026-08-01 after complete non-hosted MVP validation and cleanup.*
+*Updated 2026-08-01 after adding the shared startup runbook.*
