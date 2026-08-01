@@ -24,6 +24,7 @@ import {
   publishPersistedListing,
   removeListingPhoto,
 } from "./listing-image-manager";
+import { emptyListingForm, toListingPayload } from "./listings";
 
 const heicToMock = vi.hoisted(() => vi.fn());
 
@@ -84,6 +85,23 @@ afterEach(() => {
 });
 
 describe("public listing image consumers", () => {
+  it("does not construct a legacy image URL in a listing mutation payload", () => {
+    const payload = toListingPayload(
+      {
+        ...emptyListingForm,
+        make: "Honda",
+        model: "CB350",
+        year: "2024",
+        odometer_km: "4000",
+        price_inr: "210000",
+        city: "Pune",
+      },
+      "owner-1",
+    );
+
+    expect(payload).not.toHaveProperty("image_url");
+  });
+
   it("keeps only active listings and selects the first ordered photo or stock placeholder", () => {
     const baseListing = {
       seller_id: "owner-1",
