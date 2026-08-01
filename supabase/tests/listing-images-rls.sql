@@ -91,6 +91,38 @@ begin
 end;
 $$;
 
+update public.listing_image_policy
+set images_required = true
+where singleton;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.listing_image_policy
+    where singleton and images_required is true
+  ) then
+    raise exception 'Image policy assertion failed: required=true fixture was not applied';
+  end if;
+end;
+$$;
+
+update public.listing_image_policy
+set images_required = false
+where singleton;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.listing_image_policy
+    where singleton and images_required is false
+  ) then
+    raise exception 'Image policy assertion failed: required=false fixture was not restored';
+  end if;
+end;
+$$;
+
 set local role anon;
 
 do $$

@@ -5,7 +5,29 @@ export interface PublishListingAction {
   listingId: string;
 }
 
-export type ListingImageLifecycleAction = PublishListingAction;
+export interface DeleteListingImageAction {
+  action: "delete-image";
+  listingId: string;
+  imageId: string;
+  storageKey: string;
+}
+
+export interface DeleteListingAction {
+  action: "delete-listing";
+  listingId: string;
+}
+
+export interface CompensateListingImageUploadAction {
+  action: "compensate-upload";
+  listingId: string;
+  storageKey: string;
+}
+
+export type ListingImageLifecycleAction =
+  | PublishListingAction
+  | DeleteListingImageAction
+  | DeleteListingAction
+  | CompensateListingImageUploadAction;
 export type ListingLifecycleStatus = "draft" | "active" | "deleted";
 
 export interface ListingImageLifecycleResult {

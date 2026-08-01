@@ -30,6 +30,14 @@ export interface LifecycleDatabase {
   transitionListingStatus(
     transition: ListingStatusTransition,
   ): Promise<LifecycleListing>;
+  getImage(listingId: string, imageId: string): Promise<LifecycleImage | null>;
+  getImageByStorageKey(
+    listingId: string,
+    storageKey: string,
+  ): Promise<LifecycleImage | null>;
+  listImages(listingId: string): Promise<LifecycleImage[]>;
+  deleteImageMetadata(listingId: string, imageId: string): Promise<void>;
+  deleteListingImageMetadata(listingId: string): Promise<void>;
 }
 
 export interface LifecycleStorage {
@@ -41,7 +49,29 @@ export interface PublishLifecycleAction {
   listingId: string;
 }
 
-export type ListingImageLifecycleAction = PublishLifecycleAction;
+export interface DeleteImageLifecycleAction {
+  action: "delete-image";
+  listingId: string;
+  imageId: string;
+  storageKey: string;
+}
+
+export interface DeleteListingLifecycleAction {
+  action: "delete-listing";
+  listingId: string;
+}
+
+export interface CompensateUploadLifecycleAction {
+  action: "compensate-upload";
+  listingId: string;
+  storageKey: string;
+}
+
+export type ListingImageLifecycleAction =
+  | PublishLifecycleAction
+  | DeleteImageLifecycleAction
+  | DeleteListingLifecycleAction
+  | CompensateUploadLifecycleAction;
 
 export interface ListingLifecycleResult {
   action: ListingImageLifecycleAction["action"];
@@ -51,8 +81,12 @@ export interface ListingLifecycleResult {
 
 export type LifecycleErrorCode =
   | "forbidden"
+  | "invalid_request"
   | "invalid_status"
   | "image_required"
+  | "image_binding_mismatch"
+  | "storage_remove_failed"
+  | "metadata_remove_failed"
   | "conflict"
   | "internal_error";
 
@@ -78,6 +112,46 @@ export class LifecycleError extends Error {
   }
 }
 
+export function parseListingImageLifecycleAction(
+  value: unknown,
+): ListingImageLifecycleAction {
+  if (!value || typeof value !== "object") {
+    throw new LifecycleError(
+      "invalid_request",
+      "The lifecycle request is invalid.",
+      400,
+    );
+  }
+
+  const input = value as Record<string, unknown>;
+  const action = input.action;
+  const allowedKeys = action === "delete-image"
+    ? ["action", "listingId", "imageId", "storageKey"]
+    : action === "compensate-upload"
+    ? ["action", "listingId", "storageKey"]
+    : ["action", "listingId"];
+  const hasValidShape =
+    ["publish", "delete-image", "delete-listing", "compensate-upload"].includes(
+      String(action),
+    ) &&
+    typeof input.listingId === "string" && input.listingId.length > 0 &&
+    (action !== "delete-image" ||
+      (typeof input.imageId === "string" && input.imageId.length > 0)) &&
+    (!["delete-image", "compensate-upload"].includes(String(action)) ||
+      (typeof input.storageKey === "string" && input.storageKey.length > 0)) &&
+    Object.keys(input).every((key) => allowedKeys.includes(key));
+
+  if (!hasValidShape) {
+    throw new LifecycleError(
+      "invalid_request",
+      "The lifecycle request is invalid.",
+      400,
+    );
+  }
+
+  return value as ListingImageLifecycleAction;
+}
+
 interface CreateListingImageLifecycleOptions {
   database: LifecycleDatabase;
   storage: LifecycleStorage;
@@ -85,7 +159,87 @@ interface CreateListingImageLifecycleOptions {
 
 export function createListingImageLifecycle({
   database,
+  storage,
 }: CreateListingImageLifecycleOptions) {
+  async function removeObjects(
+    storageKeys: string[],
+    listingStatus: ListingLifecycleStatus,
+  ): Promise<void> {
+    if (storageKeys.length === 0) return;
+
+    try {
+      await storage.remove(storageKeys);
+    } catch {
+      throw new LifecycleError(
+        "storage_remove_failed",
+        "The photo files could not be removed. Please try again.",
+        502,
+        true,
+        listingStatus,
+      );
+    }
+  }
+
+  async function removeImageMetadata(
+    listingId: string,
+    imageId: string,
+    listingStatus: ListingLifecycleStatus,
+  ): Promise<void> {
+    try {
+      await database.deleteImageMetadata(listingId, imageId);
+    } catch {
+      throw new LifecycleError(
+        "metadata_remove_failed",
+        "The photo record could not be removed. Please try again.",
+        502,
+        true,
+        listingStatus,
+      );
+    }
+  }
+
+  async function removeListingMetadata(
+    listingId: string,
+    listingStatus: ListingLifecycleStatus,
+  ): Promise<void> {
+    try {
+      await database.deleteListingImageMetadata(listingId);
+    } catch {
+      throw new LifecycleError(
+        "metadata_remove_failed",
+        "The listing photo records could not be removed. Please try again.",
+        502,
+        true,
+        listingStatus,
+      );
+    }
+  }
+
+  function requireMutableListing(listing: LifecycleListing): void {
+    if (listing.status === "deleted") {
+      throw new LifecycleError(
+        "invalid_status",
+        "A deleted listing cannot be changed.",
+        409,
+        false,
+        "deleted",
+      );
+    }
+  }
+
+  function isBoundCanonicalKey(
+    userId: string,
+    listingId: string,
+    storageKey: string,
+  ): boolean {
+    const escapedOwner = userId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedListing = listingId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(
+      `^${escapedOwner}/${escapedListing}/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.webp$`,
+      "i",
+    ).test(storageKey);
+  }
+
   return {
     async execute(
       userId: string,
@@ -100,39 +254,146 @@ export function createListingImageLifecycle({
         );
       }
 
-      if (listing.status !== "draft") {
+      if (action.action === "publish") {
+        if (listing.status !== "draft") {
+          throw new LifecycleError(
+            "invalid_status",
+            "Only a draft listing can be published.",
+            409,
+            false,
+            listing.status,
+          );
+        }
+
+        const imagesRequired = await database.getImagesRequired();
+        const imageCount = await database.countImages(action.listingId);
+        if (imagesRequired && imageCount === 0) {
+          throw new LifecycleError(
+            "image_required",
+            "Add at least one photo before publishing this listing.",
+            409,
+            false,
+            "draft",
+          );
+        }
+
+        const activeListing = await database.transitionListingStatus({
+          userId,
+          listingId: action.listingId,
+          expectedStatus: "draft",
+          nextStatus: "active",
+        });
+
+        return {
+          action: action.action,
+          listingId: action.listingId,
+          status: activeListing.status,
+        };
+      }
+
+      requireMutableListing(listing);
+
+      if (action.action === "delete-image") {
+        const image = await database.getImage(action.listingId, action.imageId);
+        if (
+          !image ||
+          image.storageKey !== action.storageKey ||
+          !isBoundCanonicalKey(userId, action.listingId, image.storageKey)
+        ) {
+          throw new LifecycleError(
+            "image_binding_mismatch",
+            "The photo does not belong to this listing.",
+            403,
+            false,
+            listing.status,
+          );
+        }
+
+        let currentStatus = listing.status;
+        const imagesRequired = await database.getImagesRequired();
+        const imageCount = await database.countImages(action.listingId);
+        if (imagesRequired && listing.status === "active" && imageCount === 1) {
+          const draftListing = await database.transitionListingStatus({
+            userId,
+            listingId: action.listingId,
+            expectedStatus: "active",
+            nextStatus: "draft",
+          });
+          currentStatus = draftListing.status;
+        }
+
+        await removeObjects([image.storageKey], currentStatus);
+        await removeImageMetadata(action.listingId, image.id, currentStatus);
+        return {
+          action: action.action,
+          listingId: action.listingId,
+          status: currentStatus,
+        };
+      }
+
+      if (action.action === "delete-listing") {
+        const images = await database.listImages(action.listingId);
+        if (
+          images.some(
+            (image) =>
+              !isBoundCanonicalKey(userId, action.listingId, image.storageKey),
+          )
+        ) {
+          throw new LifecycleError(
+            "image_binding_mismatch",
+            "A photo key does not belong to this listing.",
+            403,
+            false,
+            listing.status,
+          );
+        }
+        await removeObjects(
+          images.map((image) => image.storageKey),
+          listing.status,
+        );
+        await removeListingMetadata(action.listingId, listing.status);
+        const deletedListing = await database.transitionListingStatus({
+          userId,
+          listingId: action.listingId,
+          expectedStatus: listing.status,
+          nextStatus: "deleted",
+        });
+        return {
+          action: action.action,
+          listingId: action.listingId,
+          status: deletedListing.status,
+        };
+      }
+
+      if (!isBoundCanonicalKey(userId, action.listingId, action.storageKey)) {
         throw new LifecycleError(
-          "invalid_status",
-          "Only a draft listing can be published.",
+          "image_binding_mismatch",
+          "The photo key does not belong to this listing.",
+          403,
+          false,
+          listing.status,
+        );
+      }
+
+      const registeredImage = await database.getImageByStorageKey(
+        action.listingId,
+        action.storageKey,
+      );
+      if (registeredImage) {
+        throw new LifecycleError(
+          "image_binding_mismatch",
+          "A registered photo must use the normal delete action.",
           409,
           false,
           listing.status,
         );
       }
 
-      const imagesRequired = await database.getImagesRequired();
-      const imageCount = await database.countImages(action.listingId);
-      if (imagesRequired && imageCount === 0) {
-        throw new LifecycleError(
-          "image_required",
-          "Add at least one photo before publishing this listing.",
-          409,
-          false,
-          "draft",
-        );
-      }
-
-      const activeListing = await database.transitionListingStatus({
-        userId,
-        listingId: action.listingId,
-        expectedStatus: "draft",
-        nextStatus: "active",
-      });
-
+      await removeObjects([action.storageKey], listing.status);
       return {
         action: action.action,
         listingId: action.listingId,
-        status: activeListing.status,
+        status: listing.status,
       };
     },
   };

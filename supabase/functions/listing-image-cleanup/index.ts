@@ -5,8 +5,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import {
   LifecycleError,
   createListingImageLifecycle,
+  parseListingImageLifecycleAction,
   type LifecycleDatabase,
-  type ListingImageLifecycleAction,
   type ListingLifecycleStatus,
 } from "./lifecycle.ts";
 
@@ -20,26 +20,6 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: JSON_HEADERS,
   });
-}
-
-function readAction(value: unknown): ListingImageLifecycleAction {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    (value as Record<string, unknown>).action !== "publish" ||
-    typeof (value as Record<string, unknown>).listingId !== "string" ||
-    Object.keys(value as Record<string, unknown>).some(
-      (key) => !["action", "listingId"].includes(key),
-    )
-  ) {
-    throw new LifecycleError(
-      "internal_error",
-      "The lifecycle request is invalid.",
-      400,
-    );
-  }
-
-  return value as ListingImageLifecycleAction;
 }
 
 function createDatabase(client: ReturnType<typeof createClient>): LifecycleDatabase {
@@ -110,6 +90,74 @@ function createDatabase(client: ReturnType<typeof createClient>): LifecycleDatab
         status: data.status as ListingLifecycleStatus,
       };
     },
+
+    async getImage(listingId, imageId) {
+      const { data, error } = await client
+        .from("listing_images")
+        .select("id, listing_id, storage_key, position")
+        .eq("id", imageId)
+        .eq("listing_id", listingId)
+        .maybeSingle();
+      if (error) throw error;
+      return data
+        ? {
+            id: data.id,
+            listingId: data.listing_id,
+            storageKey: data.storage_key,
+            position: data.position,
+          }
+        : null;
+    },
+
+    async getImageByStorageKey(listingId, storageKey) {
+      const { data, error } = await client
+        .from("listing_images")
+        .select("id, listing_id, storage_key, position")
+        .eq("listing_id", listingId)
+        .eq("storage_key", storageKey)
+        .maybeSingle();
+      if (error) throw error;
+      return data
+        ? {
+            id: data.id,
+            listingId: data.listing_id,
+            storageKey: data.storage_key,
+            position: data.position,
+          }
+        : null;
+    },
+
+    async listImages(listingId) {
+      const { data, error } = await client
+        .from("listing_images")
+        .select("id, listing_id, storage_key, position")
+        .eq("listing_id", listingId)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((image) => ({
+        id: image.id,
+        listingId: image.listing_id,
+        storageKey: image.storage_key,
+        position: image.position,
+      }));
+    },
+
+    async deleteImageMetadata(listingId, imageId) {
+      const { error } = await client
+        .from("listing_images")
+        .delete()
+        .eq("id", imageId)
+        .eq("listing_id", listingId);
+      if (error) throw error;
+    },
+
+    async deleteListingImageMetadata(listingId) {
+      const { error } = await client
+        .from("listing_images")
+        .delete()
+        .eq("listing_id", listingId);
+      if (error) throw error;
+    },
   };
 }
 
@@ -148,7 +196,7 @@ Deno.serve(async (request) => {
       );
     }
 
-    const action = readAction(await request.json());
+    const action = parseListingImageLifecycleAction(await request.json());
     const lifecycle = createListingImageLifecycle({
       database: createDatabase(admin),
       storage: {
