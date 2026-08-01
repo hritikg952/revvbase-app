@@ -27,6 +27,7 @@ export interface PhotoFileState {
   fileName: string;
   phase: PhotoFilePhase;
   message: string;
+  image?: ListingImage;
 }
 
 export interface PhotoFileError {
@@ -60,8 +61,9 @@ function emit(
   fileName: string,
   phase: PhotoFilePhase,
   message: string,
+  image?: ListingImage,
 ): void {
-  onFileState?.({ id, fileName, phase, message });
+  onFileState?.({ id, fileName, phase, message, image });
 }
 
 function normalizationErrorMessage(
@@ -136,6 +138,7 @@ export async function processListingPhotoSelection({
         source.name,
         "success",
         `${source.name} added.`,
+        image,
       );
     } catch {
       const message = `${source.name} could not be uploaded. Your existing photos were not changed. Try again.`;

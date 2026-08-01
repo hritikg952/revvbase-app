@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
+import { ListingImageManager } from "@/components/listing-image-manager";
 import type { Listing } from "@/lib/database.types";
 import {
   createListingThroughPublication,
@@ -18,6 +19,7 @@ import {
   type ListingFormValues,
 } from "@/lib/listings";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { createBrowserListingImageStorage } from "@/lib/storage/browser-listing-image-storage";
 
 interface ListingFormProps {
   listing?: Listing;
@@ -32,6 +34,10 @@ export function ListingForm({ listing }: ListingFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const imageStorage = useMemo(
+    () => (listing ? createBrowserListingImageStorage() : null),
+    [listing],
+  );
 
   function update<K extends keyof ListingFormValues>(key: K, value: ListingFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -167,6 +173,17 @@ export function ListingForm({ listing }: ListingFormProps) {
           {errors.description && <span className="field-error">{errors.description}</span>}
         </label>
       </fieldset>
+
+      {listing && imageStorage && (
+        <ListingImageManager
+          listingId={listing.id}
+          sellerId={listing.seller_id}
+          vehicleLabel={`${listing.make} ${listing.model}`}
+          initialStatus={listing.status}
+          storage={imageStorage}
+          executeLifecycle={invokeListingImageLifecycle}
+        />
+      )}
 
       {submitError && <p className="form-alert error" role="alert">{submitError}</p>}
       <div className="form-actions">
