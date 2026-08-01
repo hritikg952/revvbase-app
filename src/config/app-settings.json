@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "images": {
+    "required": false,
+    "maxPerListing": 5,
+    "acceptedSourceMimeTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/heic",
+      "image/heif"
+    ],
+    "sourceSafety": {
+      "maxBytes": 20971520,
+      "maxPixels": 40000000
+    },
+    "canonical": {
+      "mimeType": "image/webp",
+      "maxBytes": 1048576,
+      "maxLongEdge": 2560,
+      "initialQuality": 0.86,
+      "minimumQuality": 0.5,
+      "qualityStep": 0.06
+    },
+    "display": {
+      "aspectRatioWidth": 4,
+      "aspectRatioHeight": 3,
+      "cardWidth": 640,
+      "thumbnailWidth": 480
+    }
+  }
+}
