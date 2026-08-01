@@ -5,6 +5,7 @@ import { test } from "node:test";
 import {
   LifecycleError,
   createListingImageLifecycle,
+  parseListingImageLifecycleAction,
   type LifecycleDatabase,
   type LifecycleListing,
   type LifecycleStorage,
@@ -182,6 +183,31 @@ test("rejects a non-owner before reading policy or image metadata", async () => 
   assert.deepEqual(fixture.events, [
     `get-owned-listing:${OTHER_USER_ID}:${LISTING_ID}`,
   ]);
+});
+
+test("accepts only fixed action fields and rejects browser policy overrides", () => {
+  assert.deepEqual(
+    parseListingImageLifecycleAction({
+      action: "publish",
+      listingId: LISTING_ID,
+    }),
+    { action: "publish", listingId: LISTING_ID },
+  );
+
+  assert.throws(
+    () =>
+      parseListingImageLifecycleAction({
+        action: "publish",
+        listingId: LISTING_ID,
+        imagesRequired: false,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof LifecycleError);
+      assert.equal(error.code, "invalid_request");
+      assert.equal(error.status, 400);
+      return true;
+    },
+  );
 });
 
 const IMAGE_ONE = {
