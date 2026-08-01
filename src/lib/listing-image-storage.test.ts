@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isListingStatus } from "./database.types";
 import { emptyListingForm, toListingPayload } from "./listings";
 import { createSupabaseListingImageStorage } from "./storage/supabase-listing-images";
 
@@ -143,5 +144,14 @@ describe("draft listing lifecycle contract", () => {
     );
 
     expect(payload.status).toBe("draft");
+  });
+
+  it("keeps draft, active, and deleted as distinct persisted states", () => {
+    expect(["draft", "active", "deleted"].map(isListingStatus)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(isListingStatus("published")).toBe(false);
   });
 });
