@@ -1,9 +1,14 @@
 import type { Listing } from "./database.types";
-import type {
-  ListingImageLifecycleAction,
-  ListingImageLifecycleResult,
-  ListingLifecycleStatus,
+import {
+  ListingImageLifecycleClientError,
+  type ListingImageLifecycleAction,
+  type ListingImageLifecycleResult,
+  type ListingLifecycleStatus,
 } from "./listing-image-lifecycle-client";
+/*
+ * Lifecycle behavior is injected here so browser consumers can react only to
+ * the protected server result and never mutate listing status directly.
+ */
 import type { ListingImage } from "./storage/listing-image-storage";
 
 export const LISTING_IMAGE_PLACEHOLDER = "/vehicle-placeholder.svg";
@@ -79,18 +84,29 @@ export async function deleteManagedListing({
   currentStatus,
   execute,
 }: DeleteManagedListingInput) {
-  const result = await execute({ action: "delete-listing", listingId });
-  if (result.status !== "deleted") {
+  try {
+    const result = await execute({ action: "delete-listing", listingId });
+    if (result.status !== "deleted") {
+      return {
+        ok: false as const,
+        status: result.status,
+        message: "Listing could not be deleted. It is still available to you. Try again.",
+      };
+    }
+
+    return {
+      ok: true as const,
+      status: result.status,
+      message: "Listing deleted.",
+    };
+  } catch (error) {
     return {
       ok: false as const,
-      status: result.status ?? currentStatus,
+      status:
+        error instanceof ListingImageLifecycleClientError && error.listingStatus
+          ? error.listingStatus
+          : currentStatus,
       message: "Listing could not be deleted. It is still available to you. Try again.",
     };
   }
-
-  return {
-    ok: true as const,
-    status: result.status,
-    message: "Listing deleted.",
-  };
 }
