@@ -11,7 +11,16 @@ export type FuelType =
   | "hybrid"
   | "not_applicable";
 
-export type ListingStatus = "draft" | "active" | "deleted";
+export const LISTING_STATUSES = ["draft", "active", "deleted"] as const;
+
+export type ListingStatus = (typeof LISTING_STATUSES)[number];
+
+export function isListingStatus(value: unknown): value is ListingStatus {
+  return (
+    typeof value === "string" &&
+    LISTING_STATUSES.includes(value as ListingStatus)
+  );
+}
 
 export interface Listing {
   id: string;
