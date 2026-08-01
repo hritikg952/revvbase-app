@@ -36,6 +36,12 @@ values
     '61000000-0000-4000-8000-000000000001',
     'scooter', 'Test', 'Draft Scooter', 2024, 1000,
     90000, 'Pune', 'petrol', 1, 'draft'
+  ),
+  (
+    '62000000-0000-4000-8000-000000000004',
+    '61000000-0000-4000-8000-000000000001',
+    'motorcycle', 'Test', 'Deleted Bike', 2024, 1000,
+    80000, 'Pune', 'petrol', 1, 'deleted'
   );
 
 insert into public.listing_images (
@@ -54,6 +60,24 @@ values
     '61000000-0000-4000-8000-000000000001/62000000-0000-4000-8000-000000000002/64000000-0000-4000-8000-000000000002.webp',
     0
   );
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.listing_image_policy
+    where singleton
+      and config_schema_version = 1
+      and source_config_path = 'src/config/app-settings.json'
+      and images_required is false
+      and max_images_per_listing = 5
+      and canonical_mime_type = 'image/webp'
+      and canonical_max_bytes = 1048576
+  ) then
+    raise exception 'Image policy assertion failed: deployed mirror must match the versioned JSON release checklist';
+  end if;
+end;
+$$;
 
 set local role anon;
 
@@ -96,8 +120,8 @@ begin
     raise exception 'Image RLS assertion failed: browser-created listing must default to draft';
   end if;
 
-  if (select count(*) from public.listings where id::text like '62000000-%') <> 3 then
-    raise exception 'Image RLS assertion failed: owner must see active and all owned drafts';
+  if (select count(*) from public.listings where id::text like '62000000-%') <> 4 then
+    raise exception 'Image RLS assertion failed: owner must see active, draft, and deleted owned records';
   end if;
 
   if (select count(*) from public.listing_images where id::text like '63000000-%') <> 2 then
@@ -109,6 +133,33 @@ begin
       set status = 'active'
       where id = '62000000-0000-4000-8000-000000000002';
     raise exception 'Image RLS assertion failed: direct draft publication unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    update public.listings
+      set status = 'deleted'
+      where id = '62000000-0000-4000-8000-000000000002';
+    raise exception 'Image RLS assertion failed: direct draft deletion transition unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    update public.listings
+      set status = 'draft'
+      where id = '62000000-0000-4000-8000-000000000001';
+    raise exception 'Image RLS assertion failed: direct active-to-draft transition unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    update public.listings
+      set status = 'deleted'
+      where id = '62000000-0000-4000-8000-000000000001';
+    raise exception 'Image RLS assertion failed: direct active deletion transition unexpectedly succeeded';
   exception
     when insufficient_privilege then null;
   end;
@@ -139,6 +190,21 @@ begin
   exception
     when insufficient_privilege then null;
   end;
+end;
+$$;
+
+do $$
+declare
+  changed integer;
+begin
+  update public.listings
+    set status = 'active'
+    where id = '62000000-0000-4000-8000-000000000004';
+  get diagnostics changed = row_count;
+
+  if changed <> 0 then
+    raise exception 'Image RLS assertion failed: browser restored a deleted listing';
+  end if;
 end;
 $$;
 
