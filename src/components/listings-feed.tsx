@@ -4,10 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ListingCard } from "@/components/listing-card";
 import type { Listing } from "@/lib/database.types";
+import {
+  getPublicListingCards,
+  type ListingCardView,
+} from "@/lib/listing-image-consumers";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { createBrowserListingImageStorage } from "@/lib/storage/browser-listing-image-storage";
+import type { ListingImage } from "@/lib/storage/listing-image-storage";
 
 export function ListingsFeed() {
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [cards, setCards] = useState<ListingCardView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,15 +22,28 @@ export function ListingsFeed() {
     setError(null);
     const { data, error: queryError } = await getSupabaseBrowserClient()
       .from("listings")
-      .select("*")
+      .select("id, seller_id, vehicle_type, make, model, year, odometer_km, price_inr, city, fuel_type, previous_owners, insurance_valid_until, description, status, created_at, updated_at")
       .eq("status", "active")
       .order("created_at", { ascending: false });
 
     if (queryError) {
       setError(queryError.message);
-      setListings([]);
+      setCards([]);
     } else {
-      setListings((data ?? []) as Listing[]);
+      const activeListings = ((data ?? []) as Listing[]).filter(
+        (listing) => listing.status === "active",
+      );
+      const storage = createBrowserListingImageStorage();
+      const imageEntries = await Promise.all(
+        activeListings.map(async (listing) => {
+          try {
+            return [listing.id, await storage.list(listing.id)] as const;
+          } catch {
+            return [listing.id, [] as ListingImage[]] as const;
+          }
+        }),
+      );
+      setCards(getPublicListingCards(activeListings, new Map(imageEntries)));
     }
     setLoading(false);
   }, []);
@@ -53,7 +72,7 @@ export function ListingsFeed() {
     );
   }
 
-  if (!listings.length) {
+  if (!cards.length) {
     return (
       <div className="state-panel compact">
         <h3>No vehicles listed yet</h3>
@@ -65,7 +84,7 @@ export function ListingsFeed() {
 
   return (
     <div className="listing-grid">
-      {listings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}
+      {cards.map((card) => <ListingCard key={card.listing.id} card={card} />)}
     </div>
   );
 }

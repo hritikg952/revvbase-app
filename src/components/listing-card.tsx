@@ -1,21 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { Listing } from "@/lib/database.types";
+import type { ListingCardView } from "@/lib/listing-image-consumers";
 import { formatPrice, formatVehicleType } from "@/lib/listings";
 
-export function ListingCard({ listing }: { listing: Listing }) {
-  const [imageSrc, setImageSrc] = useState(listing.image_url || "/vehicle-placeholder.svg");
+export function ListingCard({ card }: { card: ListingCardView }) {
+  const { listing } = card;
+  const [imageSrc, setImageSrc] = useState(card.coverUrl);
+  const [hasCoverPhoto, setHasCoverPhoto] = useState(card.hasCoverPhoto);
 
   return (
     <article className="listing-card">
       <div className="listing-image-wrap">
-        {/* Dynamic seller URLs are intentionally rendered as plain images for the MVP. */}
         <img
           src={imageSrc}
-          alt={listing.image_url ? `${listing.make} ${listing.model}` : "Stock two-wheeler illustration"}
+          alt={hasCoverPhoto
+            ? `${listing.make} ${listing.model} — photo 1`
+            : "Stock two-wheeler illustration"}
           className="listing-image"
-          onError={() => setImageSrc("/vehicle-placeholder.svg")}
+          onError={() => {
+            setImageSrc("/vehicle-placeholder.svg");
+            setHasCoverPhoto(false);
+          }}
         />
         <span className="vehicle-pill">{formatVehicleType(listing.vehicle_type)}</span>
       </div>

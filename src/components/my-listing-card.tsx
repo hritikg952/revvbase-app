@@ -2,38 +2,41 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { Listing } from "@/lib/database.types";
+import {
+  deleteManagedListing,
+  type OwnerListingCardView,
+} from "@/lib/listing-image-consumers";
+import { invokeListingImageLifecycle } from "@/lib/listing-image-lifecycle-client";
 import { formatPrice } from "@/lib/listings";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 interface MyListingCardProps {
-  listing: Listing;
-  ownerId: string;
+  card: OwnerListingCardView;
   onDeleted: (id: string) => void;
 }
 
-export function MyListingCard({ listing, ownerId, onDeleted }: MyListingCardProps) {
+export function MyListingCard({ card, onDeleted }: MyListingCardProps) {
+  const { listing } = card;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function remove() {
     const confirmed = window.confirm(
-      "Delete listing? This removes it from public browsing and cannot be undone here.",
+      "Delete listing and all its photos permanently? This cannot be undone.",
     );
     if (!confirmed) return;
 
     setPending(true);
     setError(null);
-    const { error: updateError } = await getSupabaseBrowserClient()
-      .from("listings")
-      .update({ status: "deleted" })
-      .eq("id", listing.id)
-      .eq("seller_id", ownerId);
+    const result = await deleteManagedListing({
+      listingId: listing.id,
+      currentStatus: listing.status,
+      execute: invokeListingImageLifecycle,
+    });
 
-    if (updateError) {
-      setError(updateError.message);
-    } else {
+    if (result.ok && result.status === "deleted") {
       onDeleted(listing.id);
+    } else {
+      setError(result.message);
     }
     setPending(false);
   }
@@ -41,20 +44,24 @@ export function MyListingCard({ listing, ownerId, onDeleted }: MyListingCardProp
   return (
     <article className="my-listing-card">
       <div>
-        <span className={`status-badge ${listing.status}`}>{listing.status}</span>
+        <span className={`status-badge ${listing.status}`}>{card.statusLabel}</span>
         <h3>{listing.make} {listing.model}</h3>
         <p>{formatPrice(listing.price_inr)} · {listing.city}</p>
       </div>
-      {listing.status === "active" && (
-        <div className="card-actions">
-          <Link className="button button-secondary button-small" href={`/listings/${listing.id}/edit`}>
+      <div className="card-actions">
+        {pending ? (
+          <span className="button button-secondary button-small" aria-disabled="true">
+            Edit
+          </span>
+        ) : (
+          <Link className="button button-secondary button-small" href={card.editHref}>
             Edit
           </Link>
-          <button className="text-button destructive" type="button" onClick={remove} disabled={pending}>
-            {pending ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      )}
+        )}
+        <button className="text-button destructive" type="button" onClick={remove} disabled={pending}>
+          {pending ? "Deleting…" : "Delete"}
+        </button>
+      </div>
       {error && <p className="form-alert error" role="alert">{error}</p>}
     </article>
   );

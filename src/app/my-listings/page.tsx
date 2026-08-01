@@ -6,11 +6,17 @@ import { AuthRequired } from "@/components/auth-required";
 import { useAuth } from "@/components/auth-provider";
 import { MyListingCard } from "@/components/my-listing-card";
 import type { Listing } from "@/lib/database.types";
+import {
+  getOwnerListingCards,
+  type OwnerListingCardView,
+} from "@/lib/listing-image-consumers";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { createBrowserListingImageStorage } from "@/lib/storage/browser-listing-image-storage";
+import type { ListingImage } from "@/lib/storage/listing-image-storage";
 
 export default function MyListingsPage() {
   const { user } = useAuth();
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [cards, setCards] = useState<OwnerListingCardView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,11 +26,27 @@ export default function MyListingsPage() {
     setError(null);
     const { data, error: queryError } = await getSupabaseBrowserClient()
       .from("listings")
-      .select("*")
+      .select("id, seller_id, vehicle_type, make, model, year, odometer_km, price_inr, city, fuel_type, previous_owners, insurance_valid_until, description, status, created_at, updated_at")
       .eq("seller_id", user.id)
+      .in("status", ["draft", "active"])
       .order("created_at", { ascending: false });
     if (queryError) setError(queryError.message);
-    else setListings((data ?? []) as Listing[]);
+    else {
+      const managedListings = ((data ?? []) as Listing[]).filter(
+        (listing) => listing.status === "draft" || listing.status === "active",
+      );
+      const storage = createBrowserListingImageStorage();
+      const imageEntries = await Promise.all(
+        managedListings.map(async (listing) => {
+          try {
+            return [listing.id, await storage.list(listing.id)] as const;
+          } catch {
+            return [listing.id, [] as ListingImage[]] as const;
+          }
+        }),
+      );
+      setCards(getOwnerListingCards(managedListings, new Map(imageEntries)));
+    }
     setLoading(false);
   }, [user]);
 
@@ -50,14 +72,13 @@ export default function MyListingsPage() {
             <p>{error}</p>
             <button className="button button-secondary" type="button" onClick={() => void load()}>Try again</button>
           </div>
-        ) : listings.length && user ? (
+        ) : cards.length && user ? (
           <div className="my-listings-grid">
-            {listings.map((listing) => (
+            {cards.map((card) => (
               <MyListingCard
-                key={listing.id}
-                listing={listing}
-                ownerId={user.id}
-                onDeleted={(id) => setListings((rows) => rows.map((row) => row.id === id ? { ...row, status: "deleted" } : row))}
+                key={card.listing.id}
+                card={card}
+                onDeleted={(id) => setCards((rows) => rows.filter((row) => row.listing.id !== id))}
               />
             ))}
           </div>
