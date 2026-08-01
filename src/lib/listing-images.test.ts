@@ -8,6 +8,11 @@ import {
   parseAppSettings,
 } from "./listing-images";
 import { normalizeListingImage } from "./image-normalizer.client";
+import {
+  createListingThroughPublication,
+  getListingFieldUpdate,
+} from "./listing-form-workflow";
+import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-client";
 
 const heicToMock = vi.hoisted(() => vi.fn());
 
@@ -123,6 +128,80 @@ describe("listing image settings", () => {
         },
       }),
     ).toThrow(/maxPerListing/);
+  });
+});
+
+describe("draft-first listing publication", () => {
+  it("persists a draft before protected publication and follows the active server result", async () => {
+    const calls: string[] = [];
+
+    const outcome = await createListingThroughPublication({
+      draftNotice: "Your listing is ready to publish without photos.",
+      persistDraft: async () => {
+        calls.push("persist-draft");
+        return { id: "listing-1" };
+      },
+      publish: async (listingId) => {
+        calls.push(`publish:${listingId}`);
+        return { status: "active" };
+      },
+    });
+
+    expect(calls).toEqual(["persist-draft", "publish:listing-1"]);
+    expect(outcome).toEqual({
+      listingId: "listing-1",
+      status: "active",
+      destination: "/my-listings",
+      notice: null,
+    });
+  });
+
+  it("keeps the persisted owner draft reachable when protected publication requires a photo", async () => {
+    const outcome = await createListingThroughPublication({
+      draftNotice: "Your listing is saved as a draft. Add photos to publish it.",
+      persistDraft: async () => ({ id: "listing-2" }),
+      publish: async () => {
+        throw new ListingImageLifecycleClientError(
+          "image_required",
+          "Add at least one photo before publishing this listing.",
+          false,
+          "draft",
+        );
+      },
+    });
+
+    expect(outcome).toEqual({
+      listingId: "listing-2",
+      status: "draft",
+      destination: "/listings/listing-2/edit?created=draft",
+      notice: "Your listing is saved as a draft. Add photos to publish it.",
+    });
+  });
+
+  it("uses an authoritative draft result even when client copy expects optional photos", async () => {
+    const outcome = await createListingThroughPublication({
+      draftNotice: "Your listing is ready to publish without photos.",
+      persistDraft: async () => ({ id: "listing-3" }),
+      publish: async () => ({ status: "draft" }),
+    });
+
+    expect(outcome).toEqual({
+      listingId: "listing-3",
+      status: "draft",
+      destination: "/listings/listing-3/edit?created=draft",
+      notice: "Your listing was saved as a draft.",
+    });
+  });
+
+  it("never writes owner or lifecycle fields during an existing listing field update", () => {
+    expect(
+      getListingFieldUpdate({
+        seller_id: "owner-1",
+        status: "draft",
+        make: "Honda",
+        city: "Pune",
+      }),
+    ).toEqual({ make: "Honda", city: "Pune" });
   });
 });
 
