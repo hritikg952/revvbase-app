@@ -9,6 +9,10 @@ import {
 } from "./listing-images";
 import { normalizeListingImage } from "./image-normalizer.client";
 
+const heicToMock = vi.hoisted(() => vi.fn());
+
+vi.mock("heic-to", () => ({ heicTo: heicToMock }));
+
 function imageFile(
   name: string,
   type: string,
@@ -59,6 +63,7 @@ function installBrowserImageHarness(outputs: Blob[]) {
 }
 
 afterEach(() => {
+  heicToMock.mockReset();
   vi.unstubAllGlobals();
 });
 
@@ -244,9 +249,70 @@ describe("listing image normalization", () => {
     expect(harness.close).toHaveBeenCalledOnce();
   });
 
-  it("isolates HEIC until a reviewed decoder is provided", async () => {
-    const harness = installBrowserImageHarness([]);
-    const source = imageFile("iphone.heic", "image/heic", [
+  it.each([
+    {
+      name: "iphone.heic",
+      mimeType: "image/heic",
+      brand: [0x68, 0x65, 0x69, 0x63],
+    },
+    {
+      name: "iphone.heif",
+      mimeType: "image/heif",
+      brand: [0x6d, 0x69, 0x66, 0x31],
+    },
+  ])(
+    "routes $mimeType through the reviewed decoder and canonical WebP path",
+    async ({ name, mimeType, brand }) => {
+      const harness = installBrowserImageHarness([webpBlob(700_000)]);
+      const decodedBitmap = {
+        width: 3024,
+        height: 4032,
+        close: vi.fn(),
+      };
+      heicToMock.mockResolvedValueOnce(decodedBitmap);
+      const source = imageFile(name, mimeType, [
+        0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, ...brand,
+      ]);
+
+      const result = await normalizeListingImage(source);
+
+      expect(result).toMatchObject({
+        ok: true,
+        width: 1920,
+        height: 2560,
+        sourceMimeType: mimeType,
+        file: { name: `${name.replace(/\.[^.]+$/, "")}.webp` },
+      });
+      expect(heicToMock).toHaveBeenCalledWith({ blob: source, type: "bitmap" });
+      expect(harness.createImageBitmap).not.toHaveBeenCalled();
+      expect(harness.drawImage).toHaveBeenCalledWith(
+        decodedBitmap,
+        0,
+        0,
+        1920,
+        2560,
+      );
+      expect(decodedBitmap.close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    {
+      label: "decoder rejection",
+      decoded: "reject",
+    },
+    {
+      label: "non-bitmap decoder output",
+      decoded: "blob",
+    },
+  ])("returns a file-specific error for $label", async ({ decoded }) => {
+    installBrowserImageHarness([]);
+    if (decoded === "reject") {
+      heicToMock.mockRejectedValueOnce(new Error("bad HEIC"));
+    } else {
+      heicToMock.mockResolvedValueOnce(new Blob([]));
+    }
+    const source = imageFile("broken.heic", "image/heic", [
       0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
     ]);
 
@@ -254,9 +320,8 @@ describe("listing image normalization", () => {
 
     expect(result).toMatchObject({
       ok: false,
-      code: "heic-decoder-unavailable",
-      fileName: "iphone.heic",
+      code: "decode-failed",
+      fileName: "broken.heic",
     });
-    expect(harness.createImageBitmap).not.toHaveBeenCalled();
   });
 });
