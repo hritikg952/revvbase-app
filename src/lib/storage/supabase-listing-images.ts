@@ -41,6 +41,16 @@ export interface SupabaseListingImagesClient {
     name: "register_listing_image",
     args: { p_listing_id: string; p_storage_key: string },
   ): Promise<ProviderResult<ListingImageRow | ListingImageRow[] | null>>;
+  from?(table: "listing_images"): {
+    select(columns: string): {
+      eq(column: "listing_id", value: string): {
+        order(
+          column: "position",
+          options: { ascending: true },
+        ): Promise<ProviderResult<ListingImageRow[] | null>>;
+      };
+    };
+  };
 }
 
 interface CreateSupabaseListingImageStorageOptions {
@@ -105,11 +115,30 @@ export function createSupabaseListingImageStorage({
       return toListingImage(registeredRow, data.publicUrl);
     },
 
-    async list(): Promise<ListingImage[]> {
-      throw new ListingImageStorageError(
-        "list_failed",
-        "Listing photos could not be loaded.",
-      );
+    async list(listingId: string): Promise<ListingImage[]> {
+      if (!client.from) {
+        throw new ListingImageStorageError(
+          "list_failed",
+          "Listing photos could not be loaded.",
+        );
+      }
+
+      const result = await client
+        .from("listing_images")
+        .select("id, listing_id, storage_key, position, created_at")
+        .eq("listing_id", listingId)
+        .order("position", { ascending: true });
+      if (result.error || !result.data) {
+        throw new ListingImageStorageError(
+          "list_failed",
+          "Listing photos could not be loaded.",
+        );
+      }
+
+      return result.data.map((row) => {
+        const { data } = bucket.getPublicUrl(row.storage_key);
+        return toListingImage(row, data.publicUrl);
+      });
     },
   };
 }
