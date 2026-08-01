@@ -183,7 +183,7 @@ async function uploadAndRegister(
 async function assertObjectEventuallyMissing(storageKey: string) {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const publicRead = await fetch(
-      `${url}/storage/v1/object/public/listing-images/${storageKey}`,
+      `${url}/storage/v1/object/public/listing-images/${storageKey}?cleanup-check=${Date.now()}-${attempt}`,
       { cache: "no-store" },
     );
     if (publicRead.status === 400 || publicRead.status === 404) return;
