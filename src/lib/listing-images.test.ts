@@ -12,7 +12,10 @@ import {
   createListingThroughPublication,
   getListingFieldUpdate,
 } from "./listing-form-workflow";
-import { getPublicListingCards } from "./listing-image-consumers";
+import {
+  getOwnerListingCards,
+  getPublicListingCards,
+} from "./listing-image-consumers";
 import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-client";
 import {
   getOrderedPhotoTiles,
@@ -146,6 +149,47 @@ describe("public listing image consumers", () => {
       expect.objectContaining({
         listing: expect.objectContaining({ id: "active-without-photos" }),
         coverUrl: "/vehicle-placeholder.svg",
+      }),
+    ]);
+  });
+});
+
+describe("owner listing image consumers", () => {
+  it("keeps draft and active listings manageable while excluding deleted records", () => {
+    const baseListing = {
+      seller_id: "owner-1",
+      vehicle_type: "scooter" as const,
+      make: "TVS",
+      model: "Ntorq",
+      year: 2023,
+      odometer_km: 8_000,
+      price_inr: 85_000,
+      city: "Mumbai",
+      fuel_type: "petrol" as const,
+      previous_owners: 1,
+      insurance_valid_until: null,
+      description: null,
+      image_url: null,
+      created_at: "2026-08-01T00:00:00.000Z",
+      updated_at: "2026-08-01T00:00:00.000Z",
+    };
+    const listings = [
+      { ...baseListing, id: "draft-1", status: "draft" as const },
+      { ...baseListing, id: "active-1", status: "active" as const },
+      { ...baseListing, id: "deleted-1", status: "deleted" as const },
+    ];
+
+    expect(getOwnerListingCards(listings, new Map())).toEqual([
+      expect.objectContaining({
+        listing: expect.objectContaining({ id: "draft-1" }),
+        statusLabel: "Draft",
+        editHref: "/listings/draft-1/edit",
+        publicHref: null,
+      }),
+      expect.objectContaining({
+        listing: expect.objectContaining({ id: "active-1" }),
+        statusLabel: "Active",
+        editHref: "/listings/active-1/edit",
       }),
     ]);
   });
