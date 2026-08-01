@@ -16,6 +16,7 @@ import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-clie
 import {
   getOrderedPhotoTiles,
   processListingPhotoSelection,
+  publishPersistedListing,
   removeListingPhoto,
 } from "./listing-image-manager";
 
@@ -374,6 +375,32 @@ describe("authoritative listing photo removal", () => {
       images: [onlyPhoto],
       status: "active",
       message: "Photo could not be removed. It is still on your listing. Try again.",
+    });
+  });
+});
+
+describe("persisted draft republication", () => {
+  it("requests protected publication and displays only the returned status", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      action: "publish",
+      listingId: "listing-1",
+      status: "active",
+    });
+
+    const result = await publishPersistedListing({
+      listingId: "listing-1",
+      currentStatus: "draft",
+      execute,
+    });
+
+    expect(execute).toHaveBeenCalledWith({
+      action: "publish",
+      listingId: "listing-1",
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "active",
+      message: "Your listing is published.",
     });
   });
 });
