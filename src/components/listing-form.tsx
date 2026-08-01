@@ -5,6 +5,12 @@ import { FormEvent, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import type { Listing } from "@/lib/database.types";
 import {
+  createListingThroughPublication,
+  getListingFieldUpdate,
+} from "@/lib/listing-form-workflow";
+import { invokeListingImageLifecycle } from "@/lib/listing-image-lifecycle-client";
+import { getImageLifecycleCopy } from "@/lib/listing-images";
+import {
   emptyListingForm,
   listingToForm,
   toListingPayload,
@@ -48,23 +54,53 @@ export function ListingForm({ listing }: ListingFormProps) {
     const supabase = getSupabaseBrowserClient();
     const payload = toListingPayload(values, user.id);
 
-    const result = listing
-      ? await supabase
+    try {
+      if (listing) {
+        const result = await supabase
           .from("listings")
-          .update({ ...payload, status: listing.status })
+          .update(getListingFieldUpdate(payload))
           .eq("id", listing.id)
           .eq("seller_id", user.id)
           .select("id")
-          .single()
-      : await supabase.from("listings").insert(payload).select("id").single();
+          .single();
+        if (result.error) throw result.error;
+        router.push("/my-listings");
+        return;
+      }
 
-    if (result.error) {
-      setSubmitError(result.error.message);
+      const outcome = await createListingThroughPublication({
+        draftNotice: getImageLifecycleCopy().draftNotice,
+        persistDraft: async () => {
+          const result = await supabase
+            .from("listings")
+            .insert(payload)
+            .select("id")
+            .single();
+          if (result.error || !result.data) {
+            throw result.error ?? new Error("The draft could not be saved.");
+          }
+          return { id: result.data.id };
+        },
+        publish: async (listingId) => {
+          const result = await invokeListingImageLifecycle({
+            action: "publish",
+            listingId,
+          });
+          if (result.status === "deleted") {
+            throw new Error("The saved draft is no longer available.");
+          }
+          return { status: result.status };
+        },
+      });
+      router.push(outcome.destination);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "The listing could not be saved. Try again.",
+      );
       setPending(false);
-      return;
     }
-
-    router.push("/my-listings");
   }
 
   return (
@@ -129,12 +165,6 @@ export function ListingForm({ listing }: ListingFormProps) {
           Description <span className="optional">Optional</span>
           <textarea value={values.description} onChange={(event) => update("description", event.target.value)} maxLength={5000} rows={5} />
           {errors.description && <span className="field-error">{errors.description}</span>}
-        </label>
-        <label>
-          Image URL <span className="optional">Optional</span>
-          <input type="url" value={values.image_url} onChange={(event) => update("image_url", event.target.value)} placeholder="https://…" maxLength={2048} />
-          <span className="field-hint">Leave blank to use the Revvbase stock placeholder.</span>
-          {errors.image_url && <span className="field-error">{errors.image_url}</span>}
         </label>
       </fieldset>
 

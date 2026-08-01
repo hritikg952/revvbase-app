@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AuthRequired } from "@/components/auth-required";
 import { useAuth } from "@/components/auth-provider";
 import { ListingForm } from "@/components/listing-form";
 import type { Listing } from "@/lib/database.types";
+import { getImageLifecycleCopy } from "@/lib/listing-images";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function EditListingPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,9 +53,19 @@ export default function EditListingPage() {
         ) : (
           <>
             <div className="page-heading">
-              <p className="eyebrow">Edit listing</p>
+              <p className="eyebrow">{listing.status === "draft" ? "Edit draft" : "Edit listing"}</p>
               <h1>{listing.make} {listing.model}</h1>
+              {listing.status === "draft" && (
+                <p>This listing is visible only in your garage until protected publication succeeds.</p>
+              )}
             </div>
+            {listing.status === "draft" && searchParams.get("created") === "draft" && (
+              <div className="form-alert success" role="status">
+                {getImageLifecycleCopy().minimumToPublish === 1
+                  ? getImageLifecycleCopy().draftNotice
+                  : "Your listing was saved as a draft."}
+              </div>
+            )}
             <ListingForm listing={listing} />
           </>
         )}
