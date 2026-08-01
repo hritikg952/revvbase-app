@@ -32,7 +32,7 @@
 - [x] **IMG-02**: A supported JPEG, PNG, WebP, HEIC, or HEIF source is decoded and normalized to a verified canonical image within configured bounds, while invalid input leaves existing image state unchanged.
 - [x] **IMG-03**: Owners can persist up to the configured image count through a provider-neutral storage contract, with ordered metadata and owner-scoped authorization.
 - [x] **IMG-04**: Protected draft publication and permanent cleanup enforce the configured required-image lifecycle without exposing draft listing records publicly.
-- [ ] **IMG-05**: Sellers can independently add and remove listing photos, while owner and public views use the first ordered image as cover and retain a reliable placeholder fallback.
+- [x] **IMG-05**: Sellers can independently add and remove listing photos, while owner and public views use the first ordered image as cover and retain a reliable placeholder fallback.
 
 ### Security and data rules
 
