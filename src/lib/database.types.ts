@@ -36,7 +36,6 @@ export interface Listing {
   previous_owners: number;
   insurance_valid_until: string | null;
   description: string | null;
-  image_url: string | null;
   status: ListingStatus;
   created_at: string;
   updated_at: string;

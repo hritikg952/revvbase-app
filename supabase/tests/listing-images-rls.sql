@@ -63,6 +63,25 @@ values
 
 do $$
 begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'listings'
+      and column_name = 'image_url'
+  ) then
+    raise exception 'Image contract assertion failed: legacy listings.image_url still exists';
+  end if;
+
+  if not exists (
+    select 1
+    from storage.buckets
+    where id = 'listing-images'
+      and public
+  ) then
+    raise exception 'Image contract assertion failed: accepted public listing image delivery changed';
+  end if;
+
   if not exists (
     select 1
     from public.listing_image_policy
@@ -134,6 +153,25 @@ begin
   if (select count(*) from public.listing_images where id::text like '63000000-%') <> 1 then
     raise exception 'Image RLS assertion failed: anonymous readers must see only active-listing metadata';
   end if;
+
+  if exists (
+    select 1
+    from public.listings
+    where id::text like '62000000-%'
+      and status <> 'active'
+  ) then
+    raise exception 'Image RLS assertion failed: public card query exposed a non-active listing';
+  end if;
+
+  if exists (
+    select 1
+    from public.listing_images as images
+    join public.listings on listings.id = images.listing_id
+    where images.id::text like '63000000-%'
+      and listings.status <> 'active'
+  ) then
+    raise exception 'Image RLS assertion failed: public image relation exposed draft metadata';
+  end if;
 end;
 $$;
 
@@ -185,6 +223,15 @@ begin
 
   if (select count(*) from public.listing_images where id::text like '63000000-%') <> 2 then
     raise exception 'Image RLS assertion failed: owner must see metadata on owned drafts';
+  end if;
+
+  if not exists (
+    select 1
+    from public.listings
+    where id = '62000000-0000-4000-8000-000000000002'
+      and status = 'draft'
+  ) then
+    raise exception 'Image RLS assertion failed: owner cannot select their draft listing';
   end if;
 
   begin
