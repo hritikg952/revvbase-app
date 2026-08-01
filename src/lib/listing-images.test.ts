@@ -12,6 +12,7 @@ import {
   createListingThroughPublication,
   getListingFieldUpdate,
 } from "./listing-form-workflow";
+import { getPublicListingCards } from "./listing-image-consumers";
 import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-client";
 import {
   getOrderedPhotoTiles,
@@ -76,6 +77,78 @@ function installBrowserImageHarness(outputs: Blob[]) {
 afterEach(() => {
   heicToMock.mockReset();
   vi.unstubAllGlobals();
+});
+
+describe("public listing image consumers", () => {
+  it("keeps only active listings and selects the first ordered photo or stock placeholder", () => {
+    const baseListing = {
+      seller_id: "owner-1",
+      vehicle_type: "motorcycle" as const,
+      make: "Honda",
+      model: "CB350",
+      year: 2024,
+      odometer_km: 4_000,
+      price_inr: 210_000,
+      city: "Pune",
+      fuel_type: "petrol" as const,
+      previous_owners: 1,
+      insurance_valid_until: null,
+      description: null,
+      image_url: "https://legacy.example/must-not-render.jpg",
+      created_at: "2026-08-01T00:00:00.000Z",
+      updated_at: "2026-08-01T00:00:00.000Z",
+    };
+    const listings = [
+      { ...baseListing, id: "active-with-photos", status: "active" as const },
+      { ...baseListing, id: "active-without-photos", status: "active" as const },
+      { ...baseListing, id: "draft-with-photo", status: "draft" as const },
+    ];
+    const imagesByListing = new Map([
+      [
+        "active-with-photos",
+        [
+          {
+            id: "second",
+            listingId: "active-with-photos",
+            storageKey: "opaque-second",
+            publicUrl: "https://cdn.example/second.webp",
+            position: 1,
+            createdAt: "2026-08-01T00:00:02.000Z",
+          },
+          {
+            id: "cover",
+            listingId: "active-with-photos",
+            storageKey: "opaque-cover",
+            publicUrl: "https://cdn.example/cover.webp",
+            position: 0,
+            createdAt: "2026-08-01T00:00:01.000Z",
+          },
+        ],
+      ],
+      [
+        "draft-with-photo",
+        [{
+          id: "draft-photo",
+          listingId: "draft-with-photo",
+          storageKey: "opaque-draft",
+          publicUrl: "https://cdn.example/draft.webp",
+          position: 0,
+          createdAt: "2026-08-01T00:00:03.000Z",
+        }],
+      ],
+    ]);
+
+    expect(getPublicListingCards(listings, imagesByListing)).toEqual([
+      expect.objectContaining({
+        listing: expect.objectContaining({ id: "active-with-photos" }),
+        coverUrl: "https://cdn.example/cover.webp",
+      }),
+      expect.objectContaining({
+        listing: expect.objectContaining({ id: "active-without-photos" }),
+        coverUrl: "/vehicle-placeholder.svg",
+      }),
+    ]);
+  });
 });
 
 describe("listing image settings", () => {
