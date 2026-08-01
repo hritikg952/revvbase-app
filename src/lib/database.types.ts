@@ -11,7 +11,7 @@ export type FuelType =
   | "hybrid"
   | "not_applicable";
 
-export type ListingStatus = "active" | "deleted";
+export type ListingStatus = "draft" | "active" | "deleted";
 
 export interface Listing {
   id: string;

@@ -95,7 +95,7 @@ export function toListingPayload(values: ListingFormValues, sellerId: string) {
     insurance_valid_until: values.insurance_valid_until || null,
     description: values.description.trim() || null,
     image_url: values.image_url.trim() || null,
-    status: "active" as const,
+    status: "draft" as const,
   };
 }
 

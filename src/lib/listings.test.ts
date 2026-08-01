@@ -44,7 +44,7 @@ describe("listing form contract", () => {
       model: "Activa 6G",
       city: "Pune",
       price_inr: 85000,
-      status: "active",
+      status: "draft",
     });
   });
 
