@@ -216,3 +216,39 @@ export async function removeListingPhoto({
     };
   }
 }
+
+interface PublishPersistedListingInput {
+  listingId: string;
+  currentStatus: ListingLifecycleStatus;
+  execute: (
+    action: ListingImageLifecycleAction,
+  ) => Promise<ListingImageLifecycleResult>;
+}
+
+export async function publishPersistedListing({
+  listingId,
+  currentStatus,
+  execute,
+}: PublishPersistedListingInput) {
+  try {
+    const result = await execute({ action: "publish", listingId });
+    return {
+      ok: true as const,
+      status: result.status,
+      message: result.status === "active"
+        ? "Your listing is published."
+        : "Your listing remains a draft.",
+    };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status:
+        error instanceof ListingImageLifecycleClientError && error.listingStatus
+          ? error.listingStatus
+          : currentStatus,
+      message: error instanceof ListingImageLifecycleClientError
+        ? error.message
+        : "Your listing could not be published. Try again.",
+    };
+  }
+}
