@@ -4,20 +4,13 @@ import type {
   UploadListingImageInput,
 } from "./listing-image-storage";
 import { ListingImageStorageError } from "./listing-image-storage";
+import type { ListingImageRow } from "../database.types";
 
 const LISTING_IMAGES_BUCKET = "listing-images";
 
 interface ProviderResult<T> {
   data: T;
   error: { message?: string } | null;
-}
-
-interface ListingImageRow {
-  id: string;
-  listing_id: string;
-  storage_key: string;
-  position: number;
-  created_at: string;
 }
 
 interface StorageBucketClient {

@@ -32,3 +32,11 @@ export interface Listing {
   created_at: string;
   updated_at: string;
 }
+
+export interface ListingImageRow {
+  id: string;
+  listing_id: string;
+  storage_key: string;
+  position: number;
+  created_at: string;
+}
