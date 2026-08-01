@@ -12,7 +12,6 @@ export interface ListingFormValues {
   previous_owners: string;
   insurance_valid_until: string;
   description: string;
-  image_url: string;
 }
 
 export const emptyListingForm: ListingFormValues = {
@@ -27,7 +26,6 @@ export const emptyListingForm: ListingFormValues = {
   previous_owners: "1",
   insurance_valid_until: "",
   description: "",
-  image_url: "",
 };
 
 export function listingToForm(listing: Listing): ListingFormValues {
@@ -43,7 +41,6 @@ export function listingToForm(listing: Listing): ListingFormValues {
     previous_owners: String(listing.previous_owners),
     insurance_valid_until: listing.insurance_valid_until ?? "",
     description: listing.description ?? "",
-    image_url: listing.image_url ?? "",
   };
 }
 
@@ -73,10 +70,6 @@ export function validateListing(values: ListingFormValues): Record<string, strin
   if (values.description.length > 5000) {
     errors.description = "Keep the description within 5,000 characters.";
   }
-  if (values.image_url && !/^https?:\/\//i.test(values.image_url)) {
-    errors.image_url = "Use a full http:// or https:// image URL.";
-  }
-
   return errors;
 }
 
@@ -94,7 +87,6 @@ export function toListingPayload(values: ListingFormValues, sellerId: string) {
     previous_owners: Number(values.previous_owners),
     insurance_valid_until: values.insurance_valid_until || null,
     description: values.description.trim() || null,
-    image_url: values.image_url.trim() || null,
     status: "draft" as const,
   };
 }
