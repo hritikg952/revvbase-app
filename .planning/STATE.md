@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 06
 current_phase_name: listing-image-management
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-08-01T17:11:53.849Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-08-01T17:35:41.908Z"
 last_activity: 2026-08-01
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 ## Current Position
 
 Phase: 06 (listing-image-management) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-08-01 — Phase 06 execution started
 
-Progress: [██████░░░░] 64%
+Progress: [███████░░░] 73%
 
 ## Existing implementation context
 
@@ -60,6 +60,9 @@ Progress: [██████░░░░] 64%
 - [Phase ?]: Store provider-opaque image keys and derive stable public URLs only inside the Supabase storage adapter.
 - [Phase ?]: Reserve listing status transitions and permanent image deletion for protected server lifecycle authority.
 - [Phase ?]: Link the migration-owned image policy singleton to the versioned application settings source.
+- [Phase ?]: Authenticate the caller JWT and verify listing ownership before using Edge Function service-role authority.
+- [Phase ?]: Preserve the safest truthful listing state and return retryable errors when cross-system cleanup fails.
+- [Phase ?]: Accept only closed lifecycle action payloads and authoritative owner/listing/storage-key bindings.
 
 ## Risks and open decisions
 
@@ -87,8 +90,8 @@ Progress: [██████░░░░] 64%
 
 ## Session continuity
 
-**Last session:** 2026-08-01T17:11:53.844Z
-**Stopped at:** Completed 06-02-PLAN.md
+**Last session:** 2026-08-01T17:35:41.904Z
+**Stopped at:** Completed 06-03-PLAN.md
 **Resume file:** None
 
 Next action: use `START-HERE.md` for local startup and maintenance. When the user later re-enables hosting, create a new deployment phase, add its origin to Supabase Auth configuration, and run a production smoke test.
@@ -102,3 +105,4 @@ Next action: use `START-HERE.md` for local startup and maintenance. When the use
 |------|----------|-------|-------|
 | Phase 06 P01 | 24min | 2 tasks | 6 files |
 | Phase 06 P02 | 14min | 2 tasks | 8 files |
+| Phase 06 P03 | 21min | 3 tasks | 6 files |
