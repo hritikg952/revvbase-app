@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { emptyListingForm, toListingPayload } from "./listings";
 import { createSupabaseListingImageStorage } from "./storage/supabase-listing-images";
 
 describe("listing image storage contract", () => {
@@ -123,5 +124,24 @@ describe("listing image storage contract", () => {
     );
     expect(eq).toHaveBeenCalledWith("listing_id", "listing-1");
     expect(order).toHaveBeenCalledWith("position", { ascending: true });
+  });
+});
+
+describe("draft listing lifecycle contract", () => {
+  it("creates every browser-authored listing as a draft", () => {
+    const payload = toListingPayload(
+      {
+        ...emptyListingForm,
+        make: "Honda",
+        model: "Activa 6G",
+        year: "2023",
+        odometer_km: "4500",
+        price_inr: "85000",
+        city: "Pune",
+      },
+      "owner-1",
+    );
+
+    expect(payload.status).toBe("draft");
   });
 });
