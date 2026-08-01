@@ -279,6 +279,35 @@ test("keeps retryable metadata and draft status when final-image object removal 
   assert.ok(!fixture.events.some((event) => event.startsWith("delete-metadata:")));
 });
 
+test("keeps retryable metadata and draft status when final-image metadata removal fails", async () => {
+  const fixture = createFixture({
+    imagesRequired: true,
+    listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
+    images: [IMAGE_ONE],
+    failMetadataRemoval: true,
+  });
+
+  await assert.rejects(
+    fixture.lifecycle.execute(OWNER_ID, {
+      action: "delete-image",
+      listingId: LISTING_ID,
+      imageId: IMAGE_ONE.id,
+      storageKey: IMAGE_ONE.storageKey,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof LifecycleError);
+      assert.equal(error.code, "metadata_remove_failed");
+      assert.equal(error.retryable, true);
+      assert.equal(error.listingStatus, "draft");
+      return true;
+    },
+  );
+
+  assert.equal(fixture.listing()?.status, "draft");
+  assert.deepEqual(fixture.images(), [IMAGE_ONE]);
+  assert.ok(fixture.events.includes(`remove-objects:${IMAGE_ONE.storageKey}`));
+});
+
 test("removes every listing object, then metadata, then marks the row deleted", async () => {
   const fixture = createFixture({
     imagesRequired: false,
@@ -380,4 +409,25 @@ test("compensates only an unregistered canonical key bound to the owner listing"
       return true;
     },
   );
+});
+
+test("does not let compensation delete an object with registered metadata", async () => {
+  const fixture = createFixture({
+    imagesRequired: false,
+    images: [IMAGE_ONE],
+  });
+
+  await assert.rejects(
+    fixture.lifecycle.execute(OWNER_ID, {
+      action: "compensate-upload",
+      listingId: LISTING_ID,
+      storageKey: IMAGE_ONE.storageKey,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof LifecycleError);
+      assert.equal(error.code, "image_binding_mismatch");
+      return true;
+    },
+  );
+  assert.ok(!fixture.events.some((event) => event.startsWith("remove-objects:")));
 });
