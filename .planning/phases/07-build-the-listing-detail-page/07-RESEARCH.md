@@ -51,11 +51,11 @@
 
 Implement `/listings/[id]` as a client page consistent with the existing browser-only Supabase boundary: read the active listing by `id`, load its ordered `listing_images` through the existing storage adapter, and derive the owner affordance from `useAuth().user?.id === listing.seller_id`. The current database policies already make active listing and image metadata publicly readable while restricting draft image metadata to the owner, so the route must not bypass RLS or use privileged credentials. [VERIFIED: codebase grep] [CITED: https://supabase.com/docs/guides/auth]
 
-Make `ListingCard` a semantic link to that route and record `{ listingId, scrollY }` in `sessionStorage` immediately before navigation. On mounting the restored feed, wait until its loading state resolves, locate the same card by an ID-bearing element, and scroll it into view only if the stored record still targets the current feed; clear the record after applying it. The detail page’s in-app Back should call `router.back()` rather than push `/`, so browser history and the feed restoration record form one return path. Next.js scrolls client-side navigations to the top by default, hence this narrowly scoped restoration is required by D-11. [CITED: https://nextjs.org/docs/app/api-reference/functions/use-router] [VERIFIED: codebase grep]
+Make `ListingCard` a semantic link to that route and create exactly one short-lived session return record `{ listingId, scrollY, nonce, claimed: false }` immediately before navigation. Put the same opaque nonce in an internal provenance query parameter on that generated detail URL. The detail route must validate the exact listing ID plus nonce, atomically claim the record once, and use `router.back()` only for that claimed visit; every direct, missing, malformed, stale, or nonmatching visit must render/use a `/` listings fallback and must never call history Back because storage happens to contain a record. The returned feed restores only the claimed record after its target card renders, then removes it. Next.js scrolls client-side navigations to the top by default, hence this narrowly scoped restoration is required by D-11. [CITED: https://nextjs.org/docs/app/api-reference/functions/use-router] [ASSUMED]
 
 Use one local `activeIndex` state only when `images.length > 1`; one image is plain media without controls, and no-image falls back to the stock illustration. The multi-image view uses native previous/next buttons plus numbered indicators, keyboard-operable button semantics, visible labels, and no auto-rotation. D-08 is intentionally an auth-gated entry point, not an offer form: anonymous activation opens `/auth?returnTo=/listings/<id>`, and successful sign-in/sign-up returns to a validated internal `returnTo`. [CITED: https://www.w3.org/WAI/ARIA/apg/patterns/carousel/] [ASSUMED]
 
-**Primary recommendation:** Add a small client-side `ListingDetail` composition, an image-gallery component, and a feed-return helper; reuse the Phase 6 storage adapter, existing auth context, `formatPrice`, and CSS tokens without installing libraries. [VERIFIED: codebase grep]
+**Primary recommendation:** Do not start Phase 7 implementation until Phase 6 Plan 06-06 is complete; then add a small client-side `ListingDetail` composition, image-gallery component, and nonce-bound feed-return helper that consume the finalized Phase 6 public image contract without assuming a concurrent API. [VERIFIED: ROADMAP.md] [VERIFIED: .planning/STATE.md] [ASSUMED]
 
 ## Architectural Responsibility Map
 
@@ -65,7 +65,7 @@ Use one local `activeIndex` state only when `images.length > 1`; one image is pl
 | Ordered listing-photo read and public URL derivation | Browser / Client | Database / Storage | The provider-neutral adapter lists `listing_images` ordered by `position` and derives public URLs. [VERIFIED: src/lib/storage/supabase-listing-images.ts] |
 | Owner-only Edit affordance | Browser / Client | Database / Storage | The browser compares the authenticated user ID for presentation while existing owner RLS remains the authorization boundary. [VERIFIED: codebase grep] [CITED: https://supabase.com/docs/guides/database/postgres/row-level-security] |
 | Anonymous offer entry and post-auth return | Browser / Client | Frontend Server (SSR) — | This phase routes within the App Router; it does not submit an offer or need a server operation. [VERIFIED: 07-CONTEXT.md] |
-| Feed return positioning | Browser / Client | — | Scroll offset and opened-card identity are browser navigation state and should not be persisted remotely. [ASSUMED] |
+| Feed return positioning | Browser / Client | — | A nonce-bound, one-time session record proves a feed-originated visit before history Back or restoration is allowed. [ASSUMED] |
 | Mobile sticky CTA | Browser / Client | — | Responsive layout and sticky positioning are presentation concerns. [VERIFIED: 07-CONTEXT.md] |
 
 ## Standard Stack
@@ -101,12 +101,13 @@ Use one local `activeIndex` state only when `images.length > 1`; one image is pl
 ```text
 Public feed (/)
   └─ ListingCard Link click
-       ├─ save { listingId, scrollY } in sessionStorage
-       └─ /listings/[id]
+       ├─ save one short-lived { listingId, scrollY, nonce, claimed:false } record
+       └─ /listings/[id]?fromFeed=<matching nonce>
             ├─ public Supabase listing query: id + status=active
             │    └─ RLS returns only public active record
             ├─ ordered image adapter list(id)
             │    └─ listing_images ordered by position → public URLs
+            ├─ validate exact ID + nonce; claim record once
             └─ ListingDetail UI
                  ├─ 0 image → stock placeholder
                  ├─ 1 image → static hero media
@@ -117,8 +118,11 @@ Public feed (/)
 Auth success
   └─ validated internal returnTo → /listings/[id]
 
-Detail in-app Back or browser Back
-  └─ history return → feed finishes load → consumes saved record → opened card visible
+Claimed detail in-app Back or browser Back
+  └─ history return → feed renders target card → consumes claimed record once → opened card visible
+
+Direct/missing/malformed/stale/nonmatching detail visit
+  └─ `/` listings fallback; never invoke history Back from session storage alone
 ```
 
 The flow preserves the established public client/RLS boundary and the Phase 6 position-zero cover ordering. [VERIFIED: codebase grep]
@@ -167,9 +171,9 @@ The route must show a neutral unavailable state for a missing, deleted, draft, o
 
 ### Pattern 2: Feed return record and history-preserving back
 
-**What:** Before a card navigation, save `{ listingId, scrollY }` under one namespaced `sessionStorage` key. The feed restores only after listing data is rendered, calls `scrollIntoView({ block: "center" })` on the saved card (or `scrollTo` as fallback), then deletes the record. Detail’s in-app control calls `router.back()`. [CITED: https://nextjs.org/docs/app/api-reference/functions/use-router] [ASSUMED]
+**What:** Before a card navigation, create one short-lived `{ listingId, scrollY, nonce, claimed: false }` record under one namespaced `sessionStorage` key, then navigate to `/listings/<id>?fromFeed=<nonce>`. The detail route parses the provenance parameter and must validate exact ID, nonce, expiration, and unclaimed state before changing the record to `claimed: true`. Only that successful one-time claim enables its in-app Back button to call `router.back()`. The feed restores only a matching claimed record after its target card is rendered, then removes it. [CITED: https://nextjs.org/docs/app/api-reference/functions/use-router] [ASSUMED]
 
-**When to use:** Only when entering the detail route from `ListingsFeed`; direct visits have no saved record and stay at the browser’s default position. [ASSUMED]
+**When to use:** Only the exact visit generated by `ListingsFeed` may claim the record. Direct URL entry, refresh after a record was consumed, a missing/invalid/stale/nonmatching nonce, or an already-claimed record must use the listings fallback and must never invoke `router.back()` because session storage exists. [ASSUMED]
 
 **Example:**
 
@@ -178,11 +182,14 @@ The route must show a neutral unavailable state for a missing, deleted, draft, o
 const RETURN_KEY = "revvbase:listings-return";
 
 function saveFeedReturn(listingId: string) {
-  sessionStorage.setItem(RETURN_KEY, JSON.stringify({ listingId, scrollY: window.scrollY }));
+  const nonce = crypto.randomUUID();
+  sessionStorage.setItem(RETURN_KEY, JSON.stringify({ listingId, scrollY: window.scrollY, nonce, claimed: false }));
+  return nonce;
 }
 
-function backToFeed(router: ReturnType<typeof useRouter>) {
-  router.back();
+function useClaimedBack(router: ReturnType<typeof useRouter>, claimed: boolean) {
+  if (claimed) router.back();
+  else router.push("/");
 }
 ```
 
@@ -208,7 +215,7 @@ function backToFeed(router: ReturnType<typeof useRouter>) {
 
 ### Anti-Patterns to Avoid
 
-- **Push `/` for the in-app back button:** This creates a new history entry and loses the same Back path that D-11 requires; call `router.back()` and let the feed consume its return record. [CITED: https://nextjs.org/docs/app/api-reference/functions/use-router] [ASSUMED]
+- **Call `router.back()` because a return record merely exists:** Storage is not provenance; only a one-time exact listing-ID/nonce claim may authorize history Back. Use the listings fallback for all other visits. [CITED: https://nextjs.org/docs/app/api-reference/functions/use-router] [ASSUMED]
 - **Always render carousel chrome:** One image needs ordinary image semantics; inactive arrows and dots add noise and contradict D-05. [VERIFIED: 07-CONTEXT.md]
 - **Treat owner UI as authorization:** Hiding `Edit listing` is presentation only; server-side RLS and owner-scoped edit queries must remain unchanged. [CITED: https://supabase.com/docs/guides/database/postgres/row-level-security]
 - **Read `listing_images` directly in the component:** That leaks provider URL derivation out of the Phase 6 storage boundary. [VERIFIED: 06-CONTEXT.md]
@@ -306,22 +313,18 @@ The code selects presentation; protected database policies continue to enforce w
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | A feed-scoped `sessionStorage` record plus history Back is the smallest reliable D-11 mechanism under the current client-feed architecture. | Summary; Pattern 2 | Scroll restoration may need a different browser-state mechanism if the browser/session behavior differs in UAT. |
+| A1 | A nonce-bound, short-lived, one-time-claim session record plus history Back is the smallest fail-closed D-11 mechanism under the current client-feed architecture. | Summary; Pattern 2 | Browser UAT may reveal a lifecycle edge case requiring a different browser-state mechanism. |
 | A2 | `returnTo` must be limited to an internal listing pathname and resolved in both auth completion branches. | Summary; Pitfall 2 | An implementation could introduce an open redirect or lose the post-auth return. |
 | A3 | The missing/deleted/draft/RLS-hidden detail state should share neutral copy. | Pattern 1 | Product may prefer a more specific public not-found policy. |
 | A4 | No carousel library is warranted for the fixed five-image scope. | Standard Stack | A future richer gallery could require a dedicated audited component. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **What exact Phase 6 public image consumer API will Plan 06-05 finalize?**
-   - What we know: The current provider-neutral adapter exposes `list(listingId)` and returns ordered `ListingImage` records with public URLs. [VERIFIED: src/lib/storage/listing-image-storage.ts]
-   - What's unclear: Phase 6 is still executing and may add a higher-level cover/consumer helper. [VERIFIED: .planning/STATE.md]
-   - Recommendation: Plan Phase 7 after reading final Phase 6 artifacts; consume the finalized helper if it preserves the adapter boundary, otherwise use `ListingImageStorage.list()`. [ASSUMED]
+1. **Which Phase 6 image API does the detail page consume?**
+   - Resolution: Phase 7 implementation must start only after Phase 6 Plan 06-06 completes. The planner/implementer must re-read the final Phase 6 public image contract and consume it as finalized; Phase 7 may not assume, code against, or request a concurrent contract surface. [VERIFIED: ROADMAP.md] [VERIFIED: .planning/STATE.md] [ASSUMED]
 
-2. **Should the in-app Back affordance appear when the detail page is a direct entry?**
-   - What we know: D-11 requires an in-app affordance for a feed-originated visit. [VERIFIED: 07-CONTEXT.md]
-   - What's unclear: A direct visit may have no same-origin feed history entry. [ASSUMED]
-   - Recommendation: Use a Back-to-listings link fallback when no feed return record exists; do not fabricate browser history. [ASSUMED]
+2. **When is history Back safe for the in-app affordance?**
+   - Resolution: Only a feed card click creates one short-lived `{ listingId, scrollY, nonce, claimed:false }` session record and navigates using the matching internal provenance token. Detail validates exact listing ID plus nonce and claims it once before enabling history Back. A direct, missing, malformed, stale, nonmatching, or already-claimed visit must use the listings fallback and never call history Back based on storage alone. The feed consumes the claimed record once after its target card renders. [ASSUMED]
 
 ## Environment Availability
 
@@ -359,7 +362,7 @@ Phase 7 has no assigned requirement IDs in `REQUIREMENTS.md`; validate the appro
 | D-07 | Long description toggles between clamped and expanded copy | unit | `npm test -- listing-detail` | ❌ Wave 0 |
 | D-08 | Only safe internal listing `returnTo` is honored, in sign-in and immediate sign-up paths | unit | `npm test -- auth-return` | ❌ Wave 0 |
 | D-09 | Auth owner state resolves to Edit; non-owner resolves to offer/auth entry | unit | `npm test -- listing-detail` | ❌ Wave 0 |
-| D-11 | Saved card record is consumed only after feed data resolves; direct feed has no forced scroll | unit + manual browser | `npm test -- listing-return` | ❌ Wave 0 |
+| D-11 | A feed click creates one nonce-bound record and matching internal provenance URL; only exact ID+nonce can claim it once; claimed return restores after target-card render; all direct/missing/malformed/stale/nonmatching/already-claimed visits use `/` and never call history Back | unit + manual browser | `npm test -- listing-return` | ❌ Wave 0 |
 | D-01/D-10 | Desktop composition and mobile sticky primary-only CTA | manual responsive smoke | `npm run build` | ❌ manual gate |
 
 ### Sampling Rate
@@ -370,10 +373,10 @@ Phase 7 has no assigned requirement IDs in `REQUIREMENTS.md`; validate the appro
 
 ### Wave 0 Gaps
 
-- [ ] `src/lib/listing-return.test.ts` — covers D-08 and D-11 pure return-record/path validation. [ASSUMED]
+- [ ] `src/lib/listing-return.test.ts` — covers D-08 and D-11 internal return-path validation; nonce creation; exact ID/nonce/expiry validation; one-time claim; record consumption; and listings fallback for every invalid provenance case. [ASSUMED]
 - [ ] `src/components/listing-media-gallery.test.tsx` or extracted pure gallery helper test — covers D-05 wrap/index behavior. [ASSUMED]
 - [ ] `src/components/listing-detail.test.tsx` or extracted pure detail-view-model test — covers D-07 and D-09. [ASSUMED]
-- [ ] Manual browser acceptance script/checklist — covers actual Back scroll restoration, sticky mobile CTA, and keyboard focus behavior that the current Node-only Vitest configuration cannot observe. [VERIFIED: vitest.config.ts] [ASSUMED]
+- [ ] Manual browser acceptance script/checklist — covers actual claimed Back scroll restoration, direct/fallback Back behavior, sticky mobile CTA, and keyboard focus behavior that the current Node-only Vitest configuration cannot observe. [VERIFIED: vitest.config.ts] [ASSUMED]
 
 ## Security Domain
 
