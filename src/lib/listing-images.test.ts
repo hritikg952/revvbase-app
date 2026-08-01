@@ -13,6 +13,7 @@ import {
   getListingFieldUpdate,
 } from "./listing-form-workflow";
 import {
+  deleteManagedListing,
   getOwnerListingCards,
   getPublicListingCards,
 } from "./listing-image-consumers";
@@ -192,6 +193,30 @@ describe("owner listing image consumers", () => {
         editHref: "/listings/active-1/edit",
       }),
     ]);
+  });
+
+  it("removes an owner card only after protected lifecycle returns deleted", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      action: "delete-listing",
+      listingId: "listing-1",
+      status: "deleted",
+    });
+
+    const result = await deleteManagedListing({
+      listingId: "listing-1",
+      currentStatus: "active",
+      execute,
+    });
+
+    expect(execute).toHaveBeenCalledWith({
+      action: "delete-listing",
+      listingId: "listing-1",
+    });
+    expect(result).toEqual({
+      ok: true,
+      status: "deleted",
+      message: "Listing deleted.",
+    });
   });
 });
 
