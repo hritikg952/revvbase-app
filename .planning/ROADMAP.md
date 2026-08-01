@@ -20,13 +20,16 @@ The roadmap validates the smallest useful marketplace loop first: secure Supabas
 **Depends on**: Nothing (first phase)
 **Requirements**: [SEC-01, SEC-02, SEC-03]
 **Success Criteria** (what must be TRUE):
+
   1. The `revvbase` Supabase project can recreate its public schema from committed migrations.
   2. Anonymous clients can read active listings and vehicle catalog rows but cannot write.
   3. Authenticated owners can create, read, update, and soft-delete only their own listings.
   4. Reference vehicle data is seeded reproducibly and schema/RLS checks pass against the hosted project.
+
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 01-01-PLAN.md - Create, deploy, and verify the hosted schema, seed, and RLS boundary
 
 ### Phase 2: Web and authentication shell
@@ -35,13 +38,16 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: [AUTH-01, AUTH-02, AUTH-03, AUTH-04]
 **Success Criteria** (what must be TRUE):
+
   1. A visitor can open the responsive Next.js site without signing in.
   2. A user can sign up and sign in with email/password.
   3. The authenticated session survives a page reload and the user can sign out.
   4. Browser configuration contains only the Supabase publishable key, never service-role credentials.
+
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 02-01-PLAN.md - Build responsive shell and persistent email/password Auth
 
 ### Phase 3: Seller listing CRUD
@@ -50,14 +56,17 @@ Plans:
 **Depends on**: Phase 2
 **Requirements**: [LIST-01, LIST-02, LIST-03, LIST-04, LIST-05]
 **Success Criteria** (what must be TRUE):
+
   1. An authenticated user can create a listing with the required vehicle and sale details.
   2. The listing is owned by the authenticated Supabase user.
   3. The owner can view, edit, and soft-delete the listing through minimal management controls.
   4. A different authenticated user cannot alter or delete the listing.
   5. Listings without uploaded images use a stock placeholder.
+
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 03-01-PLAN.md - Build validated owner listing CRUD and soft deletion
 
 ### Phase 4: Public listings feed
@@ -66,13 +75,16 @@ Plans:
 **Depends on**: Phase 3
 **Requirements**: [BROW-01, BROW-02, BROW-03]
 **Success Criteria** (what must be TRUE):
+
   1. A signed-out visitor can load active listings from Supabase.
   2. Listing cards identify the vehicle, price, city, and image or stock placeholder.
   3. Loading, empty, and error states are visible and understandable.
   4. Soft-deleted listings never appear in the public feed.
+
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 04-01-PLAN.md - Build public active-listing feed and responsive cards
 
 ### Phase 5: MVP validation
@@ -81,13 +93,16 @@ Plans:
 **Depends on**: Phase 4
 **Requirements**: None (deployment and end-to-end validation)
 **Success Criteria** (what must be TRUE):
+
   1. A real user can sign up, create a listing, sign out, and see the active listing publicly.
   2. Auth, RLS, owner CRUD, and public-read acceptance checks pass in the hosted environment.
   3. Representative demo listings are available without exposing real user data or privileged credentials.
   4. The Next.js application passes typecheck, tests, a production build, and representative desktop/mobile local runtime checks.
+
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 05-01-PLAN.md - Run release gates and prove the complete non-hosted MVP loop
 
 ## Progress
@@ -105,6 +120,20 @@ Plans:
 ## Explicitly Deferred
 
 Production web hosting and production-origin smoke testing are explicitly deferred by the user. Seller dashboards, photo uploads and galleries, advanced search/filtering, PostGIS radius search, messaging/contact, moderation, trust features, and AI capabilities remain post-MVP decisions.
+
+### Phase 6: Listing image management
+
+**Goal:** Authenticated sellers can securely add and permanently remove ordered public listing photos while visitors see a reliable cover image or placeholder.
+**Requirements**: [IMG-01, IMG-02, IMG-03, IMG-04, IMG-05]
+**Depends on:** Phase 5
+**Plans:** 4 plans
+
+Plans:
+
+- [ ] 06-01-PLAN.md — Prove config-driven canonical image storage through a provider-neutral Supabase adapter
+- [ ] 06-02-PLAN.md — Integrate immediate seller photo controls, cover selection, and cleanup UX
+- [ ] 06-03-PLAN.md — Approve and apply the irreversible legacy media contract cutover
+- [ ] 06-04-PLAN.md — Run full automated, hosted, responsive, and browser acceptance gates
 
 ---
 *Converted to GSD phase format on 2026-07-30 after the Supabase web-MVP realignment.*
