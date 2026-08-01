@@ -1,4 +1,9 @@
 import type { Listing } from "./database.types";
+import type {
+  ListingImageLifecycleAction,
+  ListingImageLifecycleResult,
+  ListingLifecycleStatus,
+} from "./listing-image-lifecycle-client";
 import type { ListingImage } from "./storage/listing-image-storage";
 
 export const LISTING_IMAGE_PLACEHOLDER = "/vehicle-placeholder.svg";
@@ -59,4 +64,33 @@ export function getOwnerListingCards(
         publicHref: null,
       };
     });
+}
+
+interface DeleteManagedListingInput {
+  listingId: string;
+  currentStatus: ListingLifecycleStatus;
+  execute: (
+    action: ListingImageLifecycleAction,
+  ) => Promise<ListingImageLifecycleResult>;
+}
+
+export async function deleteManagedListing({
+  listingId,
+  currentStatus,
+  execute,
+}: DeleteManagedListingInput) {
+  const result = await execute({ action: "delete-listing", listingId });
+  if (result.status !== "deleted") {
+    return {
+      ok: false as const,
+      status: result.status ?? currentStatus,
+      message: "Listing could not be deleted. It is still available to you. Try again.",
+    };
+  }
+
+  return {
+    ok: true as const,
+    status: result.status,
+    message: "Listing deleted.",
+  };
 }
