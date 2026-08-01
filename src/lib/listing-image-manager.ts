@@ -13,6 +13,12 @@ import type {
   ListingImage,
   UploadListingImageInput,
 } from "./storage/listing-image-storage";
+import {
+  ListingImageLifecycleClientError,
+  type ListingImageLifecycleAction,
+  type ListingImageLifecycleResult,
+  type ListingLifecycleStatus,
+} from "./listing-image-lifecycle-client";
 
 export type PhotoFilePhase = "preparing" | "uploading" | "success" | "error";
 
@@ -149,4 +155,64 @@ export function getOrderedPhotoTiles(images: ListingImage[]) {
       ordinal: index + 1,
       isCover: index === 0,
     }));
+}
+
+interface RemoveListingPhotoInput {
+  image: ListingImage;
+  images: ListingImage[];
+  listingId: string;
+  currentStatus: ListingLifecycleStatus;
+  execute: (
+    action: ListingImageLifecycleAction,
+  ) => Promise<ListingImageLifecycleResult>;
+}
+
+export type RemoveListingPhotoResult =
+  | {
+      ok: true;
+      images: ListingImage[];
+      status: ListingLifecycleStatus;
+      message: string;
+    }
+  | {
+      ok: false;
+      images: ListingImage[];
+      status: ListingLifecycleStatus;
+      message: string;
+    };
+
+export async function removeListingPhoto({
+  image,
+  images,
+  listingId,
+  currentStatus,
+  execute,
+}: RemoveListingPhotoInput): Promise<RemoveListingPhotoResult> {
+  try {
+    const result = await execute({
+      action: "delete-image",
+      listingId,
+      imageId: image.id,
+      storageKey: image.storageKey,
+    });
+    return {
+      ok: true,
+      images: images.filter((candidate) => candidate.id !== image.id),
+      status: result.status,
+      message: result.status === "draft"
+        ? "Photo removed. Your listing is now a draft until you add a photo and publish it again."
+        : "Photo removed.",
+    };
+  } catch (error) {
+    const authoritativeStatus =
+      error instanceof ListingImageLifecycleClientError && error.listingStatus
+        ? error.listingStatus
+        : currentStatus;
+    return {
+      ok: false,
+      images: [...images],
+      status: authoritativeStatus,
+      message: "Photo could not be removed. It is still on your listing. Try again.",
+    };
+  }
 }
