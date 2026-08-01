@@ -76,6 +76,18 @@ begin
   ) then
     raise exception 'Image policy assertion failed: deployed mirror must match the versioned JSON release checklist';
   end if;
+
+  if exists (
+    select 1
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and cmd in ('DELETE', 'UPDATE')
+      and 'authenticated' = any(roles)
+      and coalesce(qual, '') like '%listing-images%'
+  ) then
+    raise exception 'Image policy assertion failed: browser object deletion or replacement authority exists';
+  end if;
 end;
 $$;
 
@@ -119,6 +131,21 @@ begin
   if new_status <> 'draft' then
     raise exception 'Image RLS assertion failed: browser-created listing must default to draft';
   end if;
+
+  begin
+    insert into public.listings (
+      id, seller_id, vehicle_type, make, model, year, odometer_km,
+      price_inr, city, fuel_type, previous_owners, status
+    ) values (
+      '62000000-0000-4000-8000-000000000005',
+      '61000000-0000-4000-8000-000000000001',
+      'bicycle', 'Test', 'Forged Active', 2024, 0,
+      10000, 'Pune', 'not_applicable', 1, 'active'
+    );
+    raise exception 'Image RLS assertion failed: browser-created active listing unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
 
   if (select count(*) from public.listings where id::text like '62000000-%') <> 4 then
     raise exception 'Image RLS assertion failed: owner must see active, draft, and deleted owned records';
@@ -177,6 +204,26 @@ begin
       set position = 4
       where id = '63000000-0000-4000-8000-000000000002';
     raise exception 'Image RLS assertion failed: direct metadata mutation unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into public.listing_images (listing_id, storage_key, position)
+    values (
+      '62000000-0000-4000-8000-000000000002',
+      'forged/direct-metadata.webp',
+      1
+    );
+    raise exception 'Image RLS assertion failed: direct metadata insertion unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    delete from public.listing_images
+      where id = '63000000-0000-4000-8000-000000000002';
+    raise exception 'Image RLS assertion failed: direct metadata deletion unexpectedly succeeded';
   exception
     when insufficient_privilege then null;
   end;
