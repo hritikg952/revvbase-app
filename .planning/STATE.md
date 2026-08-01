@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 06
 current_phase_name: listing-image-management
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-08-01T17:54:38.989Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-08-01T18:11:35.703Z"
 last_activity: 2026-08-01
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 ## Current Position
 
 Phase: 06 (listing-image-management) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-08-01 — Phase 06 execution started
 
-Progress: [██████░░░░] 64%
+Progress: [███████░░░] 71%
 
 ## Existing implementation context
 
@@ -66,6 +66,9 @@ Progress: [██████░░░░] 64%
 - [Phase ?]: Use public injected workflow seams for draft publication and immediate photo lifecycle effects without testing private React implementation details.
 - [Phase ?]: Treat protected lifecycle success and failure statuses as authoritative throughout seller photo management.
 - [Phase ?]: Keep the current storage-provider adapter behind a browser infrastructure composition root; manager and domain code consume only neutral ports.
+- [Phase ?]: Filter lifecycle state in both Supabase queries and pure consumer projections so public consumers never request draft metadata.
+- [Phase ?]: Remove owner cards only after the protected lifecycle returns status=deleted; retain failures with retry guidance.
+- [Phase ?]: Remove listings.image_url after hosted inspection found zero non-null values and the user explicitly approved the one-way cutover.
 
 ## Risks and open decisions
 
@@ -93,8 +96,8 @@ Progress: [██████░░░░] 64%
 
 ## Session continuity
 
-**Last session:** 2026-08-01T17:54:38.985Z
-**Stopped at:** Completed 06-04-PLAN.md
+**Last session:** 2026-08-01T18:11:35.698Z
+**Stopped at:** Completed 06-05-PLAN.md
 **Resume file:** None
 
 Next action: use `START-HERE.md` for local startup and maintenance. When the user later re-enables hosting, create a new deployment phase, add its origin to Supabase Auth configuration, and run a production smoke test.
@@ -110,3 +113,4 @@ Next action: use `START-HERE.md` for local startup and maintenance. When the use
 | Phase 06 P02 | 14min | 2 tasks | 8 files |
 | Phase 06 P03 | 21min | 3 tasks | 6 files |
 | Phase 06 P04 | 15min | 2 tasks | 8 files |
+| Phase 06 P05 | 14min | 2 tasks | 10 files |
