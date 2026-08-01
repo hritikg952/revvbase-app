@@ -192,6 +192,31 @@ async function assertObjectEventuallyMissing(storageKey: string) {
   throw new Error(`Deleted object remained publicly readable: ${storageKey}`);
 }
 
+async function assertPublicObjectAvailable(storageKey: string, message: string) {
+  const publicRead = await fetch(
+    `${url}/storage/v1/object/public/listing-images/${storageKey}?availability-check=${Date.now()}`,
+    { cache: "no-store" },
+  );
+  assert(publicRead.ok, message);
+}
+
+async function assertDirectStatusDenied(
+  token: string,
+  listingId: string,
+  status: "draft" | "active" | "deleted",
+) {
+  const directStatus = await request(`/rest/v1/listings?id=eq.${listingId}`, {
+    method: "PATCH",
+    token,
+    body: { status },
+    headers: { Prefer: "return=representation" },
+  });
+  assert(
+    !directStatus.response.ok,
+    `Direct browser status transition to ${status} succeeded.`,
+  );
+}
+
 async function cleanup() {
   if (createdStorageKeys.length > 0) {
     await request("/storage/v1/object/listing-images", {
@@ -229,6 +254,11 @@ try {
   await setRequiredPolicy(false);
   const optionalDraft = await createDraft(ownerToken, owner.id, "Optional");
 
+  const ownerDraft = await request(
+    `/rest/v1/listings?id=eq.${optionalDraft}&select=id,status`,
+    { token: ownerToken },
+  );
+
   const anonymousDraft = await request(
     `/rest/v1/listings?id=eq.${optionalDraft}&select=id`,
   );
@@ -238,6 +268,10 @@ try {
   );
   assert(anonymousDraft.data?.length === 0, "Anonymous draft listing leaked.");
   assert(otherDraft.data?.length === 0, "Draft listing leaked to another user.");
+  assert(
+    ownerDraft.data?.[0]?.status === "draft",
+    "Owner could not read their draft listing.",
+  );
 
   const optionalPublish = await invoke(ownerToken, {
     action: "publish",
@@ -265,10 +299,10 @@ try {
     owner.id,
     requiredDraft,
   );
-  const publicDraftObject = await fetch(
-    `${url}/storage/v1/object/public/listing-images/${requiredImage.storageKey}`,
+  await assertPublicObjectAvailable(
+    requiredImage.storageKey,
+    "Accepted public draft object delivery failed.",
   );
-  assert(publicDraftObject.ok, "Accepted public draft object delivery failed.");
 
   const anonymousMetadata = await request(
     `/rest/v1/listing_images?listing_id=eq.${requiredDraft}&select=id`,
@@ -292,28 +326,50 @@ try {
     "Forged storage key was not rejected.",
   );
 
+  const forgedOtherListingDelete = await invoke(ownerToken, {
+    action: "delete-image",
+    listingId: requiredDraft,
+    imageId: requiredImage.imageId,
+    storageKey: `${owner.id}/${optionalDraft}/${crypto.randomUUID()}.webp`,
+  });
+  assert(
+    forgedOtherListingDelete.response.status === 403 &&
+      forgedOtherListingDelete.data?.error?.code === "image_binding_mismatch",
+    "Forged cross-listing storage key was not rejected.",
+  );
+
   const nonOwnerPublish = await invoke(otherToken, {
     action: "publish",
     listingId: requiredDraft,
   });
   assert(nonOwnerPublish.response.status === 403, "Non-owner publish was not rejected.");
 
-  const directStatus = await request(
+  await assertDirectStatusDenied(ownerToken, requiredDraft, "active");
+  await assertDirectStatusDenied(ownerToken, requiredDraft, "deleted");
+  await assertDirectStatusDenied(ownerToken, optionalDraft, "draft");
+  await assertDirectStatusDenied(ownerToken, optionalDraft, "deleted");
+
+  const directListingDelete = await request(
     `/rest/v1/listings?id=eq.${requiredDraft}`,
-    {
-      method: "PATCH",
-      token: ownerToken,
-      body: { status: "active" },
-      headers: { Prefer: "return=representation" },
-    },
+    { method: "DELETE", token: ownerToken },
   );
-  assert(!directStatus.response.ok, "Direct browser status mutation succeeded.");
+  assert(!directListingDelete.response.ok, "Direct browser listing deletion succeeded.");
 
   const directMetadataDelete = await request(
     `/rest/v1/listing_images?id=eq.${requiredImage.imageId}`,
     { method: "DELETE", token: ownerToken },
   );
   assert(!directMetadataDelete.response.ok, "Direct browser metadata deletion succeeded.");
+
+  const directObjectDelete = await request(
+    `/storage/v1/object/listing-images/${requiredImage.storageKey}`,
+    { method: "DELETE", token: ownerToken },
+  );
+  assert(!directObjectDelete.response.ok, "Direct browser object deletion succeeded.");
+  await assertPublicObjectAvailable(
+    requiredImage.storageKey,
+    "Denied direct object deletion removed the canonical image.",
+  );
 
   const requiredPublish = await invoke(ownerToken, {
     action: "publish",
@@ -336,6 +392,29 @@ try {
   );
   await assertObjectEventuallyMissing(requiredImage.storageKey);
 
+  const publicAfterFinalRemoval = await request(
+    `/rest/v1/listings?id=eq.${requiredDraft}&select=id`,
+  );
+  const publicMetadataAfterFinalRemoval = await request(
+    `/rest/v1/listing_images?listing_id=eq.${requiredDraft}&select=id`,
+  );
+  const ownerAfterFinalRemoval = await request(
+    `/rest/v1/listings?id=eq.${requiredDraft}&select=status`,
+    { token: ownerToken },
+  );
+  assert(
+    publicAfterFinalRemoval.data?.length === 0,
+    "Final-photo reversion left the listing public.",
+  );
+  assert(
+    publicMetadataAfterFinalRemoval.data?.length === 0,
+    "Final-photo reversion left metadata public.",
+  );
+  assert(
+    ownerAfterFinalRemoval.data?.[0]?.status === "draft",
+    "Owner did not retain the reverted draft.",
+  );
+
   const cleanupDraft = await createDraft(ownerToken, owner.id, "Cleanup");
   const cleanupImageA = await uploadAndRegister(
     ownerToken,
@@ -346,6 +425,14 @@ try {
     ownerToken,
     owner.id,
     cleanupDraft,
+  );
+  await assertPublicObjectAvailable(
+    cleanupImageA.storageKey,
+    "First cleanup object was not publicly available before deletion.",
+  );
+  await assertPublicObjectAvailable(
+    cleanupImageB.storageKey,
+    "Second cleanup object was not publicly available before deletion.",
   );
   const cleanupResult = await invoke(ownerToken, {
     action: "delete-listing",
