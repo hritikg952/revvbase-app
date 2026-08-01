@@ -218,6 +218,27 @@ describe("owner listing image consumers", () => {
       message: "Listing deleted.",
     });
   });
+
+  it("keeps the owner card and gives retry guidance when protected deletion fails", async () => {
+    const result = await deleteManagedListing({
+      listingId: "listing-1",
+      currentStatus: "draft",
+      execute: vi.fn().mockRejectedValue(
+        new ListingImageLifecycleClientError(
+          "storage_remove_failed",
+          "provider detail",
+          true,
+          "draft",
+        ),
+      ),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: "draft",
+      message: "Listing could not be deleted. It is still available to you. Try again.",
+    });
+  });
 });
 
 describe("listing image settings", () => {
