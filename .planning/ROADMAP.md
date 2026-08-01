@@ -2,90 +2,109 @@
 
 ## Overview
 
-The revised roadmap validates the smallest useful marketplace loop first: public browsing, email/password authentication, seller listing CRUD, and secure database access. Supabase supplies the hosted PostgreSQL database, Auth, generated data APIs, and Row Level Security. A custom FastAPI service and Railway deployment are intentionally deferred.
+The roadmap validates the smallest useful marketplace loop first: secure Supabase data contracts, public browsing, email/password authentication, seller listing CRUD, and end-to-end validation. Supabase supplies PostgreSQL, Auth, generated data APIs, and Row Level Security; the historical FastAPI/Railway and Expo plans are not part of this roadmap. Web hosting is explicitly deferred until the user resumes it.
 
-## Milestones
+## Phases
 
-### [ ] Milestone 1: Supabase foundation
+- [x] **Phase 1: Supabase foundation** - Hosted schema, migrations, reference seed data, and RLS policies
+- [x] **Phase 2: Web and authentication shell** - Responsive Next.js shell with Supabase email/password authentication
+- [x] **Phase 3: Seller listing CRUD** - Owner-scoped listing creation and management
+- [x] **Phase 4: Public listings feed** - Signed-out marketplace browsing with listing cards
+- [x] **Phase 5: MVP validation** - End-to-end validation against the hosted Supabase backend
 
-**Goal:** Establish the database and security contracts without building application features.
+## Phase Details
 
-**Work:**
+### Phase 1: Supabase foundation
 
-- Create/link the Supabase project and local migration workflow.
-- Define `profiles`, `listings`, and optional `listing_images` tables.
-- Reuse the vehicle fields from `backend/app/listings/models.py`, adapting them to Supabase SQL.
-- Use `auth.users.id` as listing ownership; do not duplicate authentication users.
-- Add `active`/`deleted` status and indexes for public listing reads.
-- Enable RLS for public active reads and owner-only writes.
-- Keep city/location as stored fields; leave PostGIS/radius search for later.
-- Decide whether Supabase Storage is needed after the stock-image UI is working.
+**Goal**: Establish the hosted database and security contracts without building application features.
+**Depends on**: Nothing (first phase)
+**Requirements**: [SEC-01, SEC-02, SEC-03]
+**Success Criteria** (what must be TRUE):
+  1. The `revvbase` Supabase project can recreate its public schema from committed migrations.
+  2. Anonymous clients can read active listings and vehicle catalog rows but cannot write.
+  3. Authenticated owners can create, read, update, and soft-delete only their own listings.
+  4. Reference vehicle data is seeded reproducibly and schema/RLS checks pass against the hosted project.
+**Plans**: 1 plan
 
-**Exit criteria:** migrations apply, RLS policies are tested, and anonymous/public versus authenticated/owner access is demonstrated.
+Plans:
+- [x] 01-01-PLAN.md - Create, deploy, and verify the hosted schema, seed, and RLS boundary
 
-### [ ] Milestone 2: Web and authentication shell
+### Phase 2: Web and authentication shell
 
-**Goal:** A visitor can browse the site shell, and a user can authenticate.
+**Goal**: A visitor can browse the responsive site shell, and a user can authenticate with email/password.
+**Depends on**: Phase 1
+**Requirements**: [AUTH-01, AUTH-02, AUTH-03, AUTH-04]
+**Success Criteria** (what must be TRUE):
+  1. A visitor can open the responsive Next.js site without signing in.
+  2. A user can sign up and sign in with email/password.
+  3. The authenticated session survives a page reload and the user can sign out.
+  4. Browser configuration contains only the Supabase publishable key, never service-role credentials.
+**Plans**: 1 plan
 
-**Work:**
+Plans:
+- [x] 02-01-PLAN.md - Build responsive shell and persistent email/password Auth
 
-- Scaffold the simple React/Next.js website.
-- Add Supabase browser client using only the public/publishable key.
-- Build email/password sign-up, sign-in, session restoration, and sign-out.
-- Keep public browsing available before authentication.
-- Add basic navigation between public listings and authenticated listing creation.
+### Phase 3: Seller listing CRUD
 
-**Exit criteria:** a new user can sign up, refresh the page while signed in, sign out, and still browse while signed out.
+**Goal**: An authenticated user can create and minimally manage their vehicle listings through Supabase.
+**Depends on**: Phase 2
+**Requirements**: [LIST-01, LIST-02, LIST-03, LIST-04, LIST-05]
+**Success Criteria** (what must be TRUE):
+  1. An authenticated user can create a listing with the required vehicle and sale details.
+  2. The listing is owned by the authenticated Supabase user.
+  3. The owner can view, edit, and soft-delete the listing through minimal management controls.
+  4. A different authenticated user cannot alter or delete the listing.
+  5. Listings without uploaded images use a stock placeholder.
+**Plans**: 1 plan
 
-### [ ] Milestone 3: Seller listing CRUD
+Plans:
+- [x] 03-01-PLAN.md - Build validated owner listing CRUD and soft deletion
 
-**Goal:** An authenticated user can manage their vehicle listings.
+### Phase 4: Public listings feed
 
-**Work:**
+**Goal**: Signed-out visitors can understand the active marketplace inventory.
+**Depends on**: Phase 3
+**Requirements**: [BROW-01, BROW-02, BROW-03]
+**Success Criteria** (what must be TRUE):
+  1. A signed-out visitor can load active listings from Supabase.
+  2. Listing cards identify the vehicle, price, city, and image or stock placeholder.
+  3. Loading, empty, and error states are visible and understandable.
+  4. Soft-deleted listings never appear in the public feed.
+**Plans**: 1 plan
 
-- Build the listing form from the existing model fields.
-- Validate required fields in the browser and at the database boundary.
-- Implement create, read, update, and delete operations through Supabase.
-- Enforce ownership through RLS, not only UI checks.
-- Use a stock image or placeholder by default; keep actual upload optional.
-- Do not build a polished dashboard; provide only the minimal “my listings” controls needed to make CRUD usable.
+Plans:
+- [x] 04-01-PLAN.md - Build public active-listing feed and responsive cards
 
-**Exit criteria:** one user can create, edit, and delete a listing, and another user cannot alter it.
+### Phase 5: MVP validation
 
-### [ ] Milestone 4: Public listings feed
+**Goal**: Validate the complete public-browse and seller-listing loop locally against hosted Supabase without deploying the web application.
+**Depends on**: Phase 4
+**Requirements**: None (deployment and end-to-end validation)
+**Success Criteria** (what must be TRUE):
+  1. A real user can sign up, create a listing, sign out, and see the active listing publicly.
+  2. Auth, RLS, owner CRUD, and public-read acceptance checks pass in the hosted environment.
+  3. Representative demo listings are available without exposing real user data or privileged credentials.
+  4. The Next.js application passes typecheck, tests, a production build, and representative desktop/mobile local runtime checks.
+**Plans**: 1 plan
 
-**Goal:** Visitors can see the marketplace inventory.
+Plans:
+- [x] 05-01-PLAN.md - Run release gates and prove the complete non-hosted MVP loop
 
-**Work:**
+## Progress
 
-- Query only active listings.
-- Render responsive listing cards with stock-image fallback.
-- Add loading, empty, and error states.
-- Add a basic detail view only if needed to make the listing understandable; keep sophisticated browse/search deferred.
+**Execution Order:** Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
 
-**Exit criteria:** a signed-out visitor can load and understand the current active inventory.
+| Phase | Plans Complete | Status | Completed |
+|---|---:|---|---|
+| 1. Supabase foundation | 1/1 | Complete | 2026-07-30 |
+| 2. Web and authentication shell | 1/1 | Complete | 2026-07-30 |
+| 3. Seller listing CRUD | 1/1 | Complete | 2026-07-30 |
+| 4. Public listings feed | 1/1 | Complete | 2026-07-30 |
+| 5. MVP validation | 1/1 | Complete | 2026-08-01 |
 
-### [ ] Milestone 5: MVP validation and deployment
+## Explicitly Deferred
 
-**Goal:** Validate the end-to-end loop with minimal operations.
-
-**Work:**
-
-- Test Auth, RLS, listing CRUD, and public reads.
-- Seed representative listings for development/demo.
-- Deploy the Next.js site to a web host.
-- Configure Supabase production environment variables and redirect URLs.
-- Confirm no Railway service is needed.
-
-**Exit criteria:** a real user can sign up, create a listing, sign out, and see that listing on the public site.
-
-## Explicitly deferred
-
-Seller dashboards, photo upload workflows, search/filtering, PostGIS radius search, messaging/contact, moderation, trust features, and AI capabilities are post-MVP decisions.
-
-## Superseded planning
-
-The previous Expo/FastAPI/Railway Phase 1–5 documents remain in `.planning/phases/` as historical research, but they are not the active execution plan. They should not be executed without re-alignment.
+Production web hosting and production-origin smoke testing are explicitly deferred by the user. Seller dashboards, photo uploads and galleries, advanced search/filtering, PostGIS radius search, messaging/contact, moderation, trust features, and AI capabilities remain post-MVP decisions.
 
 ---
-*Updated 2026-07-29 after product re-alignment.*
+*Converted to GSD phase format on 2026-07-30 after the Supabase web-MVP realignment.*

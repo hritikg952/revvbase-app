@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+  <title id="title">Two-wheeler placeholder</title>
+  <desc id="desc">A simple illustration of a motorcycle on a warm background.</desc>
+  <rect width="800" height="600" fill="#e8e0d1"/>
+  <circle cx="245" cy="425" r="82" fill="none" stroke="#1d2a24" stroke-width="24"/>
+  <circle cx="585" cy="425" r="82" fill="none" stroke="#1d2a24" stroke-width="24"/>
+  <path d="M245 425h145l75-145h92l28 145M390 425l-86-155h112M350 270h-88" fill="none" stroke="#e85d24" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M470 280l-58-42h-82" fill="none" stroke="#1d2a24" stroke-width="22" stroke-linecap="round"/>
+  <text x="400" y="105" text-anchor="middle" font-family="system-ui, sans-serif" font-size="38" font-weight="700" fill="#1d2a24">Ready for its next road</text>
+</svg>
