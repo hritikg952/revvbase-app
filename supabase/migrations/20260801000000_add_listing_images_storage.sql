@@ -86,6 +86,7 @@ for each row execute function public.protect_listing_lifecycle_fields();
 create table public.listing_image_policy (
   singleton boolean primary key default true,
   config_schema_version integer not null,
+  source_config_path text not null,
   images_required boolean not null,
   max_images_per_listing smallint not null,
   canonical_mime_type text not null,
@@ -93,6 +94,7 @@ create table public.listing_image_policy (
   updated_at timestamptz not null default timezone('utc', now()),
   constraint listing_image_policy_singleton check (singleton),
   constraint listing_image_policy_schema_version check (config_schema_version > 0),
+  constraint listing_image_policy_source_path check (char_length(trim(source_config_path)) > 0),
   constraint listing_image_policy_max_images check (max_images_per_listing > 0),
   constraint listing_image_policy_mime check (canonical_mime_type = 'image/webp'),
   constraint listing_image_policy_max_bytes check (canonical_max_bytes > 0)
@@ -106,12 +108,21 @@ comment on column public.listing_image_policy.images_required is
 insert into public.listing_image_policy (
   singleton,
   config_schema_version,
+  source_config_path,
   images_required,
   max_images_per_listing,
   canonical_mime_type,
   canonical_max_bytes
 )
-values (true, 1, false, 5, 'image/webp', 1048576);
+values (
+  true,
+  1,
+  'src/config/app-settings.json',
+  false,
+  5,
+  'image/webp',
+  1048576
+);
 
 alter table public.listing_image_policy enable row level security;
 revoke all on table public.listing_image_policy from public, anon, authenticated;
