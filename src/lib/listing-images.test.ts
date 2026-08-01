@@ -13,6 +13,10 @@ import {
   getListingFieldUpdate,
 } from "./listing-form-workflow";
 import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-client";
+import {
+  getOrderedPhotoTiles,
+  processListingPhotoSelection,
+} from "./listing-image-manager";
 
 const heicToMock = vi.hoisted(() => vi.fn());
 
@@ -202,6 +206,109 @@ describe("draft-first listing publication", () => {
         city: "Pune",
       }),
     ).toEqual({ make: "Honda", city: "Pune" });
+  });
+});
+
+describe("immediate listing photo uploads", () => {
+  const cover = {
+    id: "image-1",
+    listingId: "listing-1",
+    storageKey: "opaque-cover-key",
+    publicUrl: "https://cdn.example/cover.webp",
+    position: 0,
+    createdAt: "2026-08-01T00:00:00.000Z",
+  };
+
+  it("adds each valid file independently while preserving ready photos and ordered cover state", async () => {
+    const second = imageFile("second.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const broken = imageFile("broken.gif", "image/gif", [0x47, 0x49, 0x46]);
+    const canonical = new File(["webp"], "second.webp", { type: "image/webp" });
+    const updates: Array<{ phase: string; fileName: string }> = [];
+    const normalize = vi.fn(async (file: File) =>
+      file === second
+        ? {
+            ok: true as const,
+            file: canonical,
+            width: 1200,
+            height: 900,
+            sourceMimeType: "image/jpeg" as const,
+          }
+        : {
+            ok: false as const,
+            code: "unsupported-source" as const,
+            fileName: file.name,
+            message: `${file.name} could not be used.`,
+          },
+    );
+    const upload = vi.fn(async () => ({
+      ...cover,
+      id: "image-2",
+      storageKey: "opaque-second-key",
+      publicUrl: "https://cdn.example/second.webp",
+      position: 1,
+    }));
+
+    const result = await processListingPhotoSelection({
+      files: [second, broken],
+      images: [cover],
+      listingId: "listing-1",
+      sellerId: "owner-1",
+      normalize,
+      upload,
+      onFileState: (state) => updates.push({
+        phase: state.phase,
+        fileName: state.fileName,
+      }),
+    });
+
+    expect(upload).toHaveBeenCalledWith({
+      sellerId: "owner-1",
+      listingId: "listing-1",
+      file: canonical,
+    });
+    expect(result.images).toEqual([cover, expect.objectContaining({ id: "image-2" })]);
+    expect(result.errors).toEqual([
+      {
+        fileName: "broken.gif",
+        message: "broken.gif could not be used. Choose a supported photo file.",
+      },
+    ]);
+    expect(updates).toEqual([
+      { phase: "preparing", fileName: "second.jpg" },
+      { phase: "uploading", fileName: "second.jpg" },
+      { phase: "success", fileName: "second.jpg" },
+      { phase: "preparing", fileName: "broken.gif" },
+      { phase: "error", fileName: "broken.gif" },
+    ]);
+    expect(getOrderedPhotoTiles(result.images)).toEqual([
+      expect.objectContaining({ id: "image-1", ordinal: 1, isCover: true }),
+      expect.objectContaining({ id: "image-2", ordinal: 2, isCover: false }),
+    ]);
+  });
+
+  it("rejects an over-capacity selection without touching existing photos", async () => {
+    const normalize = vi.fn();
+    const upload = vi.fn();
+    const files = [
+      imageFile("fourth.jpg", "image/jpeg", [0xff, 0xd8, 0xff]),
+      imageFile("fifth.jpg", "image/jpeg", [0xff, 0xd8, 0xff]),
+    ];
+
+    const result = await processListingPhotoSelection({
+      files,
+      images: [cover, { ...cover, id: "2" }, { ...cover, id: "3" }, { ...cover, id: "4" }],
+      listingId: "listing-1",
+      sellerId: "owner-1",
+      normalize,
+      upload,
+    });
+
+    expect(result.selectionError).toBe(
+      "You can add only 1 more photo(s) to this listing.",
+    );
+    expect(result.images).toHaveLength(4);
+    expect(normalize).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
   });
 });
 
