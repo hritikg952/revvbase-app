@@ -123,17 +123,20 @@ Production web hosting and production-origin smoke testing are explicitly deferr
 
 ### Phase 6: Listing image management
 
-**Goal:** Authenticated sellers can securely add and permanently remove ordered public listing photos while visitors see a reliable cover image or placeholder.
+**Goal:** Authenticated sellers can securely manage ordered public listing photos and config-driven draft publication while visitors see only active listings with a reliable cover image or placeholder.
+**MVP delivery note:** Image objects use stable public URLs even for drafts; only draft listing records and image metadata are owner-only in the application. Private draft staging/promotion is deferred production hardening.
 **Requirements**: [IMG-01, IMG-02, IMG-03, IMG-04, IMG-05]
 **Depends on:** Phase 5
-**Plans:** 4 plans
+**Plans:** 1/6 plans executed
 
 Plans:
 
-- [ ] 06-01-PLAN.md — Prove config-driven canonical image storage through a provider-neutral Supabase adapter
-- [ ] 06-02-PLAN.md — Integrate immediate seller photo controls, cover selection, and cleanup UX
-- [ ] 06-03-PLAN.md — Approve and apply the irreversible legacy media contract cutover
-- [ ] 06-04-PLAN.md — Run full automated, hosted, responsive, and browser acceptance gates
+- [x] 06-01-PLAN.md — Build config-driven client image normalization and approved HEIC support
+- [ ] 06-02-PLAN.md — Establish storage-neutral persistence, drafts, and status/RLS boundaries
+- [ ] 06-03-PLAN.md — Implement protected config-driven publication and cleanup lifecycle
+- [ ] 06-04-PLAN.md — Add independent draft-aware seller photo-management controls
+- [ ] 06-05-PLAN.md — Cut public/owner consumers over to ordered images and protected lifecycle
+- [ ] 06-06-PLAN.md — Run automated, hosted, responsive, and browser acceptance gates
 
 ---
 *Converted to GSD phase format on 2026-07-30 after the Supabase web-MVP realignment.*

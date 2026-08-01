@@ -26,6 +26,14 @@
 - [x] **BROW-02**: A listing card displays enough information to identify the vehicle and price, including an image or stock placeholder.
 - [x] **BROW-03**: Loading, empty, and error states are visible and understandable.
 
+### Listing images
+
+- [x] **IMG-01**: Versioned static settings control image requirements, capacity, accepted sources, safety limits, canonical output, and display values without component-level duplication.
+- [x] **IMG-02**: A supported JPEG, PNG, WebP, HEIC, or HEIF source is decoded and normalized to a verified canonical image within configured bounds, while invalid input leaves existing image state unchanged.
+- [ ] **IMG-03**: Owners can persist up to the configured image count through a provider-neutral storage contract, with ordered metadata and owner-scoped authorization.
+- [ ] **IMG-04**: Protected draft publication and permanent cleanup enforce the configured required-image lifecycle without exposing draft listing records publicly.
+- [ ] **IMG-05**: Sellers can independently add and remove listing photos, while owner and public views use the first ordered image as cover and retain a reliable placeholder fallback.
+
 ### Security and data rules
 
 - [x] **SEC-01**: Row Level Security prevents unauthenticated writes.
@@ -38,7 +46,7 @@ These remain valid product ideas but are not MVP acceptance criteria:
 
 - Seller dashboard UI.
 - Sophisticated city/location filters and PostGIS radius search.
-- Image upload and photo galleries beyond the stock-image fallback.
+- Photo reordering, galleries, zoom, and manually selected covers.
 - Buyer-seller contact, phone reveal, WhatsApp, and messaging.
 - Moderation/admin tools.
 - Ratings, reviews, trust verification, OCR, AI image processing, price fairness, notifications, and paperwork assistance.
@@ -51,8 +59,9 @@ These remain valid product ideas but are not MVP acceptance criteria:
 | LIST-01..05 | 3. Seller listing CRUD | Complete |
 | BROW-01..03 | 4. Public browse | Complete |
 | SEC-01..03 | 1. Supabase foundation | Complete |
+| IMG-01..05 | 6. Listing image management | In progress |
 
-**Coverage:** 15 MVP acceptance criteria; 15 implemented/validated.
+**Coverage:** 20 MVP acceptance criteria; 17 implemented/validated.
 
 ---
-*Updated 2026-07-29 after product re-alignment.*
+*Updated 2026-08-01 for Phase 6 listing image management.*

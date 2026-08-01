@@ -1,3 +1,21 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 06
+current_phase_name: listing-image-management
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-08-01T16:53:43.796Z"
+last_activity: 2026-08-01
+last_activity_desc: Phase 06 execution started
+progress:
+  total_phases: 6
+  completed_phases: 5
+  total_plans: 11
+  completed_plans: 6
+---
+
 # Project State
 
 ## Project Reference
@@ -5,15 +23,16 @@
 See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 
 **Core value:** A visitor can discover two-wheelers, and an authenticated user can publish a listing with the key details needed to start a sale.
-**Current focus:** MVP maintenance and local operation.
+**Current focus:** Phase 06 — listing-image-management
 
 ## Current Position
 
-Phase: 5 of 5 (MVP validation)
-Status: Complete and verified
-Last activity: 2026-08-01 — Completed quick task 260801-fjg: shared human-and-agent startup runbook.
+Phase: 06 (listing-image-management) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-08-01 — Phase 06 execution started
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 55%
 
 ## Existing implementation context
 
@@ -35,6 +54,9 @@ Progress: [██████████] 100%
 - No admin/moderation workflow in MVP.
 - Supabase is the planned backend; Railway is not required unless a later requirement demands a custom service.
 - Phase 1 uses hosted-project validation; Docker Desktop and the local Supabase stack are not MVP prerequisites.
+- [Phase ?]: Use configurable 20 MB and 40 megapixel source ceilings, then store only canonical WebP within 2560 px and 1 MB.
+- [Phase ?]: Pin human-approved heic-to at 1.5.2 and dynamically load it only for detected HEIC or HEIF bytes.
+- [Phase ?]: Validate source signatures and canonical WebP MIME, RIFF signature, and byte size rather than trusting filenames or claimed MIME.
 
 ## Risks and open decisions
 
@@ -62,7 +84,17 @@ Progress: [██████████] 100%
 
 ## Session continuity
 
+**Last session:** 2026-08-01T16:53:13.309Z
+**Stopped at:** Completed 06-01-PLAN.md
+**Resume file:** None
+
 Next action: use `START-HERE.md` for local startup and maintenance. When the user later re-enables hosting, create a new deployment phase, add its origin to Supabase Auth configuration, and run a production smoke test.
 
 ---
 *Updated 2026-08-01 after adding the shared startup runbook.*
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 06 P01 | 24min | 2 tasks | 6 files |
