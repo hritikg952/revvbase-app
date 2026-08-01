@@ -138,5 +138,16 @@ Plans:
 - [ ] 06-05-PLAN.md — Cut public/owner consumers over to ordered images and protected lifecycle
 - [ ] 06-06-PLAN.md — Run automated, hosted, responsive, and browser acceptance gates
 
+### Phase 7: Build the listing detail page
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 7 to break down)
+
 ---
 *Converted to GSD phase format on 2026-07-30 after the Supabase web-MVP realignment.*
