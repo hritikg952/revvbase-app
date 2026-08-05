@@ -5,6 +5,7 @@ import type {
 } from "./listing-image-storage";
 import { ListingImageStorageError } from "./listing-image-storage";
 import type { ListingImageRow } from "../database.types";
+import type { CompensateListingImageUploadAction } from "../listing-image-lifecycle-client";
 
 const LISTING_IMAGES_BUCKET = "listing-images";
 
@@ -49,6 +50,9 @@ export interface SupabaseListingImagesClient {
 interface CreateSupabaseListingImageStorageOptions {
   client: SupabaseListingImagesClient;
   createObjectId?: () => string;
+  compensateUpload?: (
+    action: CompensateListingImageUploadAction,
+  ) => Promise<unknown>;
 }
 
 function toListingImage(
@@ -68,6 +72,7 @@ function toListingImage(
 export function createSupabaseListingImageStorage({
   client,
   createObjectId = () => crypto.randomUUID(),
+  compensateUpload,
 }: CreateSupabaseListingImageStorageOptions): ListingImageStorage {
   const bucket = client.storage.from(LISTING_IMAGES_BUCKET);
 
@@ -98,6 +103,13 @@ export function createSupabaseListingImageStorage({
         ? registration.data[0]
         : registration.data;
       if (registration.error || !registeredRow) {
+        if (compensateUpload) {
+          await compensateUpload({
+            action: "compensate-upload",
+            listingId,
+            storageKey,
+          });
+        }
         throw new ListingImageStorageError(
           "registration_failed",
           "The uploaded photo could not be attached to this listing.",
