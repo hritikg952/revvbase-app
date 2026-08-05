@@ -52,15 +52,18 @@ interface LifecycleFunctionsClient {
       options: { body: ListingImageLifecycleAction },
     ): Promise<{
       data: ListingImageLifecycleResult | LifecycleErrorPayload | null;
-      error: { message?: string } | null;
+      error: {
+        message?: string;
+        context?: { json(): Promise<unknown> };
+      } | null;
     }>;
   };
 }
 
 function isLifecycleErrorPayload(
-  value: ListingImageLifecycleResult | LifecycleErrorPayload,
+  value: unknown,
 ): value is LifecycleErrorPayload {
-  return "error" in value;
+  return typeof value === "object" && value !== null && "error" in value;
 }
 
 export class ListingImageLifecycleClientError extends Error {
@@ -83,9 +86,20 @@ export async function invokeListingImageLifecycle(
     "listing-image-cleanup",
     { body: action },
   );
-  const errorPayload = data && isLifecycleErrorPayload(data)
+  let errorPayload = data && isLifecycleErrorPayload(data)
     ? data.error
     : undefined;
+
+  if (!errorPayload && error?.context) {
+    try {
+      const contextData = await error.context.json();
+      errorPayload = isLifecycleErrorPayload(contextData)
+        ? contextData.error
+        : undefined;
+    } catch {
+      // Preserve the SDK error below when the non-2xx body is not JSON.
+    }
+  }
 
   if (error || errorPayload || !data || isLifecycleErrorPayload(data)) {
     throw new ListingImageLifecycleClientError(
