@@ -13,5 +13,6 @@ export function createBrowserListingImageStorage(): ListingImageStorage {
     client:
       getSupabaseBrowserClient() as unknown as SupabaseListingImagesClient,
     compensateUpload: invokeListingImageLifecycle,
+    reserveUploadCleanup: invokeListingImageLifecycle,
   });
 }

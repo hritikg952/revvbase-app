@@ -48,6 +48,31 @@ describe("listing image storage contract", () => {
     expect(events).toEqual(["reserve", "upload", "register", "compensate"]);
   });
 
+  it("does not upload when durable cleanup reservation cannot be established", async () => {
+    const upload = vi.fn();
+    const rpc = vi.fn();
+    const storage = createSupabaseListingImageStorage({
+      client: {
+        storage: {
+          from: vi.fn().mockReturnValue({ upload, getPublicUrl: vi.fn() }),
+        },
+        rpc,
+      },
+      createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+
+    await expect(
+      storage.upload({
+        sellerId: "owner-1",
+        listingId: "listing-1",
+        file: new File(["webp"], "vehicle.webp", { type: "image/webp" }),
+      }),
+    ).rejects.toMatchObject({ code: "cleanup_reservation_failed" });
+    expect(upload).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("requests protected compensation for the exact object when registration fails", async () => {
     const upload = vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null });
     const compensateUpload = vi.fn().mockResolvedValue(undefined);
@@ -66,6 +91,7 @@ describe("listing image storage contract", () => {
     const storage = createSupabaseListingImageStorage({
       client,
       createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
       compensateUpload,
     });
 
@@ -112,6 +138,7 @@ describe("listing image storage contract", () => {
     const storage = createSupabaseListingImageStorage({
       client,
       createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
     });
     const canonicalFile = new File(["webp"], "vehicle.webp", {
       type: "image/webp",
@@ -184,7 +211,10 @@ describe("listing image storage contract", () => {
       from,
       rpc: vi.fn(),
     };
-    const storage = createSupabaseListingImageStorage({ client });
+    const storage = createSupabaseListingImageStorage({
+      client,
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
+    });
 
     await expect(storage.list("listing-1")).resolves.toEqual([
       expect.objectContaining({

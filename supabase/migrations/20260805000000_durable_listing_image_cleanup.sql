@@ -4,7 +4,7 @@ create table public.listing_image_cleanup_jobs (
   listing_id uuid not null references public.listings (id) on delete cascade,
   storage_key text not null unique,
   state text not null default 'pending' check (
-    state in ('pending', 'processing', 'completed', 'dead')
+    state in ('pending', 'processing', 'completed', 'cancelled', 'dead')
   ),
   attempts integer not null default 0 check (attempts >= 0),
   last_error text,
@@ -16,6 +16,28 @@ create table public.listing_image_cleanup_jobs (
 
 comment on table public.listing_image_cleanup_jobs is
   'Durable outbox for idempotent canonical object deletion after transactional listing/image state changes.';
+
+create or replace function public.cancel_listing_image_cleanup_on_registration()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.listing_image_cleanup_jobs
+  set state = 'cancelled', claimed_at = null, completed_at = timezone('utc', now()),
+      last_error = null
+  where storage_key = new.storage_key and state in ('pending', 'processing');
+  return new;
+end;
+$$;
+
+revoke execute on function public.cancel_listing_image_cleanup_on_registration()
+  from public, anon, authenticated;
+
+create trigger listing_images_cancel_cleanup_intent
+after insert on public.listing_images
+for each row execute function public.cancel_listing_image_cleanup_on_registration();
 
 create index listing_image_cleanup_jobs_pending_owner_idx
   on public.listing_image_cleanup_jobs (seller_id, created_at)
@@ -83,7 +105,9 @@ begin
     p_user_id, p_listing_id, owned_image.storage_key
   )
   on conflict (storage_key) do update
-    set state = 'pending', completed_at = null
+    set state = 'pending', attempts = 0, last_error = null,
+        next_attempt_at = timezone('utc', now()), claimed_at = null,
+        completed_at = null
   returning id into job_id;
 
   delete from public.listing_images where id = owned_image.id;
@@ -121,7 +145,9 @@ begin
   from public.listing_images as images
   where images.listing_id = p_listing_id
   on conflict (storage_key) do update
-    set state = 'pending', completed_at = null;
+    set state = 'pending', attempts = 0, last_error = null,
+        next_attempt_at = timezone('utc', now()), claimed_at = null,
+        completed_at = null;
 
   delete from public.listing_images where listing_id = p_listing_id;
   update public.listings set status = 'deleted' where id = p_listing_id;
@@ -187,7 +213,9 @@ begin
     p_user_id, p_listing_id, p_storage_key
   )
   on conflict (storage_key) do update
-    set state = 'pending', completed_at = null
+    set state = 'pending', attempts = 0, last_error = null,
+        next_attempt_at = timezone('utc', now()), claimed_at = null,
+        completed_at = null
   returning id into job_id;
 
   return query select owned_listing.status, job_id, p_storage_key;

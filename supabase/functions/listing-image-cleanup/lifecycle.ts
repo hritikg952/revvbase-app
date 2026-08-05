@@ -141,11 +141,18 @@ export interface CompensateUploadLifecycleAction {
   storageKey: string;
 }
 
+export interface ReserveUploadCleanupLifecycleAction {
+  action: "reserve-upload-cleanup";
+  listingId: string;
+  storageKey: string;
+}
+
 export type ListingImageLifecycleAction =
   | PublishLifecycleAction
   | DeleteImageLifecycleAction
   | DeleteListingLifecycleAction
-  | CompensateUploadLifecycleAction;
+  | CompensateUploadLifecycleAction
+  | ReserveUploadCleanupLifecycleAction;
 
 export interface ListingLifecycleResult {
   action: ListingImageLifecycleAction["action"];
@@ -202,17 +209,17 @@ export function parseListingImageLifecycleAction(
   const action = input.action;
   const allowedKeys = action === "delete-image"
     ? ["action", "listingId", "imageId", "storageKey"]
-    : action === "compensate-upload"
+    : action === "compensate-upload" || action === "reserve-upload-cleanup"
     ? ["action", "listingId", "storageKey"]
     : ["action", "listingId"];
   const hasValidShape =
-    ["publish", "delete-image", "delete-listing", "compensate-upload"].includes(
+    ["publish", "delete-image", "delete-listing", "compensate-upload", "reserve-upload-cleanup"].includes(
       String(action),
     ) &&
     typeof input.listingId === "string" && input.listingId.length > 0 &&
     (action !== "delete-image" ||
       (typeof input.imageId === "string" && input.imageId.length > 0)) &&
-    (!["delete-image", "compensate-upload"].includes(String(action)) ||
+    (!["delete-image", "compensate-upload", "reserve-upload-cleanup"].includes(String(action)) ||
       (typeof input.storageKey === "string" && input.storageKey.length > 0)) &&
     Object.keys(input).every((key) => allowedKeys.includes(key));
 
@@ -452,6 +459,14 @@ export function createListingImageLifecycle({
         listingId: action.listingId,
         storageKey: action.storageKey,
       });
+      if (action.action === "reserve-upload-cleanup") {
+        return {
+          action: action.action,
+          listingId: action.listingId,
+          status: reservation.status,
+          cleanupPending: true,
+        };
+      }
       const cleanupPending = await processCleanupJobs(reservation.jobs);
       return {
         action: action.action,

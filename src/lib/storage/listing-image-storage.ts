@@ -20,6 +20,7 @@ export interface ListingImageStorage {
 
 export type ListingImageStorageErrorCode =
   | "upload_failed"
+  | "cleanup_reservation_failed"
   | "registration_failed"
   | "list_failed";
 
