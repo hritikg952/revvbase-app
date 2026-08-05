@@ -99,9 +99,10 @@ export async function processListingPhotoSelection({
 
   const nextImages = [...images];
   const errors: PhotoFileError[] = [];
+  const batchId = crypto.randomUUID();
 
   for (const [index, source] of files.entries()) {
-    const operationId = `selected-${index}`;
+    const operationId = `${batchId}-${index}`;
     emit(
       onFileState,
       operationId,

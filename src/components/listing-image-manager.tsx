@@ -62,6 +62,7 @@ export function ListingImageManager({
     message: string;
   } | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [selectionPending, setSelectionPending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +113,7 @@ export function ListingImageManager({
   }
 
   async function selectPhotos(event: ChangeEvent<HTMLInputElement>) {
+    if (selectionPending) return;
     const files = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
     if (files.length === 0) return;
@@ -119,16 +121,24 @@ export function ListingImageManager({
     setSelectionError(null);
     setStatusFeedback(null);
     setFileStates([]);
-    const result = await processListingPhotoSelection({
-      files,
-      images,
-      listingId,
-      sellerId,
-      settings,
-      upload: (input) => storage.upload(input),
-      onFileState: updateFileState,
-    });
-    setSelectionError(result.selectionError);
+    setSelectionPending(true);
+    try {
+      const result = await processListingPhotoSelection({
+        files,
+        images,
+        listingId,
+        sellerId,
+        settings,
+        upload: (input) => storage.upload(input),
+        onFileState: updateFileState,
+      });
+      setSelectionError(result.selectionError);
+      setImages(await storage.list(listingId));
+    } catch {
+      setSelectionError("Listing photos could not be refreshed. Try again.");
+    } finally {
+      setSelectionPending(false);
+    }
   }
 
   async function removePhoto(image: ListingImage, ordinal: number) {
@@ -199,13 +209,13 @@ export function ListingImageManager({
           type="file"
           multiple
           accept={getImageAcceptValue(settings)}
-          disabled={capacity.remaining === 0 || loading}
+          disabled={capacity.remaining === 0 || loading || selectionPending}
           onChange={(event) => void selectPhotos(event)}
         />
         <button
           className="button button-small photo-add-button"
           type="button"
-          disabled={capacity.remaining === 0 || loading}
+          disabled={capacity.remaining === 0 || loading || selectionPending}
           onClick={() => inputRef.current?.click()}
         >
           Add photos
