@@ -564,6 +564,49 @@ describe("immediate listing photo uploads", () => {
     expect(normalize).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
   });
+
+  it("isolates an unexpected normalizer rejection to its file and continues the batch", async () => {
+    const first = imageFile("broken.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const second = imageFile("ready.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const canonical = new File(["webp"], "ready.webp", { type: "image/webp" });
+    const states: Array<{ fileName: string; phase: string }> = [];
+    const normalize = vi.fn(async (file: File) => {
+      if (file === first) throw new Error("canvas unavailable");
+      return {
+        ok: true as const,
+        file: canonical,
+        width: 1200,
+        height: 900,
+        sourceMimeType: "image/jpeg" as const,
+      };
+    });
+    const upload = vi.fn().mockResolvedValue({
+      ...cover,
+      id: "image-2",
+      position: 1,
+    });
+
+    const result = await processListingPhotoSelection({
+      files: [first, second],
+      images: [cover],
+      listingId: "listing-1",
+      sellerId: "owner-1",
+      normalize,
+      upload,
+      onFileState: ({ fileName, phase }) => states.push({ fileName, phase }),
+    });
+
+    expect(result.errors).toEqual([
+      {
+        fileName: "broken.jpg",
+        message:
+          "broken.jpg could not be used. Choose a supported photo file.",
+      },
+    ]);
+    expect(result.images).toEqual([cover, expect.objectContaining({ id: "image-2" })]);
+    expect(states).toContainEqual({ fileName: "broken.jpg", phase: "error" });
+    expect(states).toContainEqual({ fileName: "ready.jpg", phase: "success" });
+  });
 });
 
 describe("authoritative listing photo removal", () => {
