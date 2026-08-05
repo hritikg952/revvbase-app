@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 06
 current_phase_name: listing-image-management
-status: executing
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-08-01T18:11:35.703Z"
+status: verifying
+stopped_at: Completed 06-06-PLAN.md
+last_updated: "2026-08-05T09:58:19.502Z"
 last_activity: 2026-08-01
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 14
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 
 Phase: 06 (listing-image-management) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-01 — Phase 06 execution started
 
-Progress: [███████░░░] 71%
+Progress: [████████░░] 79%
 
 ## Existing implementation context
 
@@ -69,6 +69,9 @@ Progress: [███████░░░] 71%
 - [Phase ?]: Filter lifecycle state in both Supabase queries and pure consumer projections so public consumers never request draft metadata.
 - [Phase ?]: Remove owner cards only after the protected lifecycle returns status=deleted; retain failures with retry guidance.
 - [Phase ?]: Remove listings.image_url after hosted inspection found zero non-null values and the user explicitly approved the one-way cutover.
+- [Phase ?]: Parse structured Edge Function non-2xx bodies from FunctionsHttpError context before generic SDK fallback.
+- [Phase ?]: Project seller image guidance and edit messaging from validated settings and authoritative lifecycle status.
+- [Phase ?]: Restore images.required=false locally and hosted after proving both publication modes.
 
 ## Risks and open decisions
 
@@ -96,8 +99,8 @@ Progress: [███████░░░] 71%
 
 ## Session continuity
 
-**Last session:** 2026-08-01T18:11:35.698Z
-**Stopped at:** Completed 06-05-PLAN.md
+**Last session:** 2026-08-05T09:58:19.497Z
+**Stopped at:** Completed 06-06-PLAN.md
 **Resume file:** None
 
 Next action: use `START-HERE.md` for local startup and maintenance. When the user later re-enables hosting, create a new deployment phase, add its origin to Supabase Auth configuration, and run a production smoke test.
@@ -114,3 +117,4 @@ Next action: use `START-HERE.md` for local startup and maintenance. When the use
 | Phase 06 P03 | 21min | 3 tasks | 6 files |
 | Phase 06 P04 | 15min | 2 tasks | 8 files |
 | Phase 06 P05 | 14min | 2 tasks | 10 files |
+| Phase 06 P06 | 3d 15h 43m | 2 tasks | 8 files |
