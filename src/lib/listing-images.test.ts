@@ -831,6 +831,25 @@ describe("listing image normalization", () => {
     expect(harness.createImageBitmap).not.toHaveBeenCalled();
   });
 
+  it("rejects oversized PNG dimensions from bounded headers before decoding", async () => {
+    const harness = installBrowserImageHarness([]);
+    const source = imageFile("pixel-bomb.png", "image/png", [
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x01, 0x86, 0xa0,
+      0x00, 0x01, 0x86, 0xa0,
+    ]);
+
+    const result = await normalizeListingImage(source);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "source-dimensions-too-large",
+      fileName: "pixel-bomb.png",
+    });
+    expect(harness.createImageBitmap).not.toHaveBeenCalled();
+  });
+
   it("returns a bounded cannot-fit error when every quality exceeds 1 MB", async () => {
     const harness = installBrowserImageHarness(
       Array.from({ length: 7 }, () => webpBlob(1_048_577)),
