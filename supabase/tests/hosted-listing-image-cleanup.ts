@@ -415,6 +415,53 @@ try {
     "Owner did not retain the reverted draft.",
   );
 
+  const concurrentDraft = await createDraft(ownerToken, owner.id, "Concurrent");
+  const concurrentImageA = await uploadAndRegister(
+    ownerToken,
+    owner.id,
+    concurrentDraft,
+  );
+  const concurrentImageB = await uploadAndRegister(
+    ownerToken,
+    owner.id,
+    concurrentDraft,
+  );
+  const concurrentPublish = await invoke(ownerToken, {
+    action: "publish",
+    listingId: concurrentDraft,
+  });
+  assert(concurrentPublish.response.ok, "Concurrent fixture did not publish.");
+
+  const concurrentDeletes = await Promise.all([
+    invoke(ownerToken, {
+      action: "delete-image",
+      listingId: concurrentDraft,
+      imageId: concurrentImageA.imageId,
+      storageKey: concurrentImageA.storageKey,
+    }),
+    invoke(ownerToken, {
+      action: "delete-image",
+      listingId: concurrentDraft,
+      imageId: concurrentImageB.imageId,
+      storageKey: concurrentImageB.storageKey,
+    }),
+  ]);
+  assert(
+    concurrentDeletes.every((result) => result.response.ok),
+    "A concurrent image deletion failed.",
+  );
+  const concurrentOwnerRead = await request(
+    `/rest/v1/listings?id=eq.${concurrentDraft}&select=status,listing_images(id)`,
+    { token: ownerToken },
+  );
+  assert(
+    concurrentOwnerRead.data?.[0]?.status === "draft" &&
+      concurrentOwnerRead.data?.[0]?.listing_images?.length === 0,
+    "Concurrent final-photo deletion violated the required-image draft invariant.",
+  );
+  await assertObjectEventuallyMissing(concurrentImageA.storageKey);
+  await assertObjectEventuallyMissing(concurrentImageB.storageKey);
+
   const cleanupDraft = await createDraft(ownerToken, owner.id, "Cleanup");
   const cleanupImageA = await uploadAndRegister(
     ownerToken,
