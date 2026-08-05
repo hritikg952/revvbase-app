@@ -71,21 +71,41 @@ function lateSofJpeg(width: number, height: number): File {
   return new File([bytes], "late-sof.jpg", { type: "image/jpeg" });
 }
 
-function heicWithIspe(width: number, height: number): File {
-  const bytes = new Uint8Array(60);
+function jpegWithSof(name: string, width: number, height: number): File {
+  const bytes = new Uint8Array(21);
+  bytes.set([
+    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08,
+    (height >>> 8) & 0xff, height & 0xff,
+    (width >>> 8) & 0xff, width & 0xff,
+    0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
+  ]);
+  return new File([bytes], name, { type: "image/jpeg" });
+}
+
+function heicWithIspe(
+  width: number,
+  height: number,
+  name = "pixel-bomb.heic",
+  type = "image/heic",
+  brand = "heic",
+): File {
+  const bytes = new Uint8Array(72);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, 24);
-  bytes.set([0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63], 4);
-  bytes.set([0x68, 0x65, 0x69, 0x63], 16);
-  view.setUint32(24, 36);
+  bytes.set([0x66, 0x74, 0x79, 0x70], 4);
+  bytes.set([...brand].map((character) => character.charCodeAt(0)), 8);
+  bytes.set([...brand].map((character) => character.charCodeAt(0)), 16);
+  view.setUint32(24, 48);
   bytes.set([0x6d, 0x65, 0x74, 0x61], 28);
-  view.setUint32(36, 24);
+  view.setUint32(36, 36);
   bytes.set([0x69, 0x70, 0x72, 0x70], 40);
-  view.setUint32(44, 16);
-  bytes.set([0x69, 0x73, 0x70, 0x65], 48);
-  view.setUint32(52, width);
-  view.setUint32(56, height);
-  return new File([bytes], "pixel-bomb.heic", { type: "image/heic" });
+  view.setUint32(44, 28);
+  bytes.set([0x69, 0x70, 0x63, 0x6f], 48);
+  view.setUint32(52, 20);
+  bytes.set([0x69, 0x73, 0x70, 0x65], 56);
+  view.setUint32(64, width);
+  view.setUint32(68, height);
+  return new File([bytes], name, { type });
 }
 
 function installBrowserImageHarness(outputs: Blob[]) {
@@ -799,7 +819,7 @@ describe("listing image normalization", () => {
       webpBlob(1_048_577),
       webpBlob(900_000),
     ]);
-    const source = imageFile("bike.jpeg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const source = jpegWithSof("bike.jpeg", 4000, 3000);
 
     const result = await normalizeListingImage(source);
 
@@ -924,6 +944,22 @@ describe("listing image normalization", () => {
     expect(heicToMock).not.toHaveBeenCalled();
   });
 
+  it("rejects HEIC when bounded metadata cannot prove dimensions", async () => {
+    installBrowserImageHarness([]);
+    const source = imageFile("unknown.heic", "image/heic", [
+      0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
+    ]);
+
+    const result = await normalizeListingImage(source);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "decode-failed",
+      fileName: "unknown.heic",
+    });
+    expect(heicToMock).not.toHaveBeenCalled();
+  });
+
   it("returns a bounded cannot-fit error when every quality exceeds 1 MB", async () => {
     const harness = installBrowserImageHarness(
       Array.from({ length: 7 }, () => webpBlob(1_048_577)),
@@ -982,9 +1018,13 @@ describe("listing image normalization", () => {
         close: vi.fn(),
       };
       heicToMock.mockResolvedValueOnce(decodedBitmap);
-      const source = imageFile(name, mimeType, [
-        0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, ...brand,
-      ]);
+      const source = heicWithIspe(
+        3024,
+        4032,
+        name,
+        mimeType,
+        String.fromCharCode(...brand),
+      );
 
       const result = await normalizeListingImage(source);
 
@@ -1024,9 +1064,12 @@ describe("listing image normalization", () => {
     } else {
       heicToMock.mockResolvedValueOnce(new Blob([]));
     }
-    const source = imageFile("broken.heic", "image/heic", [
-      0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
-    ]);
+    const source = heicWithIspe(
+      3024,
+      4032,
+      "broken.heic",
+      "image/heic",
+    );
 
     const result = await normalizeListingImage(source);
 

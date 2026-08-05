@@ -33,7 +33,7 @@ const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const RIFF_SIGNATURE = [0x52, 0x49, 0x46, 0x46];
 const WEBP_SIGNATURE = [0x57, 0x45, 0x42, 0x50];
-const MAX_DIMENSION_HEADER_BYTES = 64 * 1024;
+const NATIVE_DIMENSION_HEADER_BYTES = 64 * 1024;
 
 function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean {
   return signature.every((byte, index) => bytes[offset + index] === byte);
@@ -110,17 +110,72 @@ function parseWebpDimensions(bytes: Uint8Array): SourceDimensions | null {
   return null;
 }
 
+function parseIsoBmffDimensions(bytes: Uint8Array): SourceDimensions | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const dimensions: SourceDimensions[] = [];
+
+  function walk(start: number, end: number, depth: number): boolean {
+    if (depth > 8) return false;
+    let offset = start;
+    while (offset < end) {
+      if (end - offset < 8) return false;
+      let size = view.getUint32(offset);
+      const type = ascii(bytes, offset + 4, 4);
+      let headerSize = 8;
+      if (size === 1) {
+        if (end - offset < 16) return false;
+        const extendedSize = view.getBigUint64(offset + 8);
+        if (extendedSize > BigInt(Number.MAX_SAFE_INTEGER)) return false;
+        size = Number(extendedSize);
+        headerSize = 16;
+      } else if (size === 0) {
+        size = end - offset;
+      }
+      if (size < headerSize || offset + size > end) return false;
+
+      const payloadStart = offset + headerSize;
+      const boxEnd = offset + size;
+      if (type === "ispe") {
+        if (boxEnd - payloadStart < 12) return false;
+        dimensions.push({
+          width: view.getUint32(payloadStart + 4),
+          height: view.getUint32(payloadStart + 8),
+        });
+      } else if (type === "meta") {
+        if (boxEnd - payloadStart < 4 || !walk(payloadStart + 4, boxEnd, depth + 1)) {
+          return false;
+        }
+      } else if (
+        (type === "iprp" || type === "ipco") &&
+        !walk(payloadStart, boxEnd, depth + 1)
+      ) {
+        return false;
+      }
+      offset = boxEnd;
+    }
+    return offset === end;
+  }
+
+  if (!walk(0, bytes.length, 0) || dimensions.length === 0) return null;
+  return dimensions.reduce((largest, candidate) =>
+    BigInt(candidate.width) * BigInt(candidate.height) >
+        BigInt(largest.width) * BigInt(largest.height)
+      ? candidate
+      : largest
+  );
+}
+
 async function parseSourceDimensions(
   file: File,
   sourceMimeType: ListingImageSourceMimeType,
+  byteBudget: number,
 ): Promise<SourceDimensions | null> {
-  // HEIC/HEIF dimensions can be nested in ISO-BMFF item properties. Do not
-  // claim a safe pre-decode result until a bounded parser covers that graph.
-  if (sourceMimeType === "image/heic" || sourceMimeType === "image/heif") {
-    return null;
-  }
+  const inspectionBytes = sourceMimeType === "image/jpeg" ||
+      sourceMimeType === "image/heic" || sourceMimeType === "image/heif"
+    ? Math.min(file.size, byteBudget)
+    : Math.min(file.size, NATIVE_DIMENSION_HEADER_BYTES);
   const bytes = new Uint8Array(
-    await file.slice(0, MAX_DIMENSION_HEADER_BYTES).arrayBuffer(),
+    await file.slice(0, inspectionBytes).arrayBuffer(),
   );
   if (sourceMimeType === "image/png" && bytes.length >= 24) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -128,6 +183,9 @@ async function parseSourceDimensions(
   }
   if (sourceMimeType === "image/jpeg") return parseJpegDimensions(bytes);
   if (sourceMimeType === "image/webp") return parseWebpDimensions(bytes);
+  if (sourceMimeType === "image/heic" || sourceMimeType === "image/heif") {
+    return parseIsoBmffDimensions(bytes);
+  }
   return null;
 }
 
@@ -303,7 +361,21 @@ export async function normalizeListingImage(
   }
 
   try {
-    const headerDimensions = await parseSourceDimensions(file, sourceMimeType);
+    const headerDimensions = await parseSourceDimensions(
+      file,
+      sourceMimeType,
+      images.sourceSafety.maxBytes,
+    );
+    if (
+      !headerDimensions &&
+      ["image/jpeg", "image/heic", "image/heif"].includes(sourceMimeType)
+    ) {
+      return failure(
+        file,
+        "decode-failed",
+        `${file.name} dimensions could not be verified safely.`,
+      );
+    }
     if (
       headerDimensions &&
       exceedsPixelLimit(headerDimensions, images.sourceSafety.maxPixels)
