@@ -298,6 +298,33 @@ test("atomically reserves metadata removal before deleting the storage object", 
   assert.deepEqual(fixture.pendingCleanup(), []);
 });
 
+test("serializes concurrent required-photo deletions and preserves the draft invariant", async () => {
+  const fixture = createFixture({
+    imagesRequired: true,
+    listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
+    images: [IMAGE_ONE, IMAGE_TWO],
+  });
+
+  const results = await Promise.all([
+    fixture.lifecycle.execute(OWNER_ID, {
+      action: "delete-image",
+      listingId: LISTING_ID,
+      imageId: IMAGE_ONE.id,
+      storageKey: IMAGE_ONE.storageKey,
+    }),
+    fixture.lifecycle.execute(OWNER_ID, {
+      action: "delete-image",
+      listingId: LISTING_ID,
+      imageId: IMAGE_TWO.id,
+      storageKey: IMAGE_TWO.storageKey,
+    }),
+  ]);
+
+  assert.equal(fixture.listing()?.status, "draft");
+  assert.deepEqual(fixture.images(), []);
+  assert.ok(results.some((result) => result.status === "draft"));
+});
+
 test("moves an active required listing to draft before removing its final image", async () => {
   const fixture = createFixture({
     imagesRequired: true,
