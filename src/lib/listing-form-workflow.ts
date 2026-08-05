@@ -23,6 +23,29 @@ export interface CreateListingOutcome {
   notice: string | null;
 }
 
+export function getCreatedDraftNotice(
+  reason: string | null,
+  settings: AppSettings = appSettings,
+): { kind: "success" | "error"; message: string } | null {
+  if (reason === "publish-failed") {
+    return {
+      kind: "error",
+      message:
+        "Your listing was saved as a draft, but publication could not be completed. Try publishing again from this page.",
+    };
+  }
+  if (reason === "draft") {
+    const lifecycleCopy = getImageLifecycleCopy(settings);
+    return {
+      kind: "success",
+      message: lifecycleCopy.minimumToPublish === 1
+        ? lifecycleCopy.draftNotice
+        : "Your listing was saved as a draft.",
+    };
+  }
+  return null;
+}
+
 export function getCreateListingGuidance(
   settings: AppSettings = appSettings,
 ): string {
@@ -82,7 +105,7 @@ export async function createListingThroughPublication({
     return {
       listingId: draft.id,
       status: "draft",
-      destination: `/listings/${draft.id}/edit?created=draft`,
+      destination: `/listings/${draft.id}/edit?created=publish-failed`,
       notice:
         "Your listing was saved as a draft, but publication could not be completed. Try publishing again from this page.",
     };
