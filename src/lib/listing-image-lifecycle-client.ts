@@ -34,6 +34,7 @@ export interface ListingImageLifecycleResult {
   action: ListingImageLifecycleAction["action"];
   listingId: string;
   status: ListingLifecycleStatus;
+  cleanupPending?: boolean;
 }
 
 interface LifecycleErrorPayload {

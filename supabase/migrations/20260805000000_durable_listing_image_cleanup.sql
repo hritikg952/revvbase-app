@@ -3,9 +3,13 @@ create table public.listing_image_cleanup_jobs (
   seller_id uuid not null references auth.users (id) on delete cascade,
   listing_id uuid not null references public.listings (id) on delete cascade,
   storage_key text not null unique,
-  state text not null default 'pending' check (state in ('pending', 'completed')),
+  state text not null default 'pending' check (
+    state in ('pending', 'processing', 'completed', 'dead')
+  ),
   attempts integer not null default 0 check (attempts >= 0),
   last_error text,
+  next_attempt_at timestamptz not null default timezone('utc', now()),
+  claimed_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   completed_at timestamptz
 );
@@ -197,7 +201,8 @@ security definer
 set search_path = ''
 as $$
   update public.listing_image_cleanup_jobs
-  set state = 'completed', completed_at = timezone('utc', now()), last_error = null
+  set state = 'completed', completed_at = timezone('utc', now()),
+      claimed_at = null, last_error = null
   where id = p_job_id;
 $$;
 
@@ -206,13 +211,53 @@ create or replace function public.fail_listing_image_cleanup(
   p_error text
 )
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = ''
 as $$
+begin
   update public.listing_image_cleanup_jobs
-  set attempts = attempts + 1, last_error = left(p_error, 2000)
-  where id = p_job_id and state = 'pending';
+  set state = case when attempts >= 5 then 'dead' else 'pending' end,
+      claimed_at = null,
+      next_attempt_at = timezone('utc', now()) +
+        make_interval(secs => least(3600, (30 * power(2, greatest(attempts - 1, 0)))::integer)),
+      last_error = left(p_error, 2000)
+  where id = p_job_id and state = 'processing';
+end;
+$$;
+
+create or replace function public.claim_listing_image_cleanup_jobs(
+  p_limit integer,
+  p_seller_id uuid default null
+)
+returns table (cleanup_job_id uuid, cleanup_storage_key text)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  return query
+  with eligible as (
+    select jobs.id
+    from public.listing_image_cleanup_jobs as jobs
+    where jobs.state = 'pending'
+      and jobs.attempts < 5
+      and jobs.next_attempt_at <= timezone('utc', now())
+      and (p_seller_id is null or jobs.seller_id = p_seller_id)
+    order by jobs.next_attempt_at, jobs.created_at
+    for update skip locked
+    limit greatest(1, least(50, p_limit))
+  ), claimed as (
+    update public.listing_image_cleanup_jobs as jobs
+    set state = 'processing',
+        attempts = jobs.attempts + 1,
+        claimed_at = timezone('utc', now())
+    from eligible
+    where jobs.id = eligible.id
+    returning jobs.id, jobs.storage_key
+  )
+  select claimed.id, claimed.storage_key from claimed;
+end;
 $$;
 
 revoke execute on function public.reserve_listing_image_deletion(uuid, uuid, uuid, text)
@@ -225,6 +270,8 @@ revoke execute on function public.complete_listing_image_cleanup(uuid)
   from public, anon, authenticated;
 revoke execute on function public.fail_listing_image_cleanup(uuid, text)
   from public, anon, authenticated;
+revoke execute on function public.claim_listing_image_cleanup_jobs(integer, uuid)
+  from public, anon, authenticated;
 
 grant execute on function public.reserve_listing_image_deletion(uuid, uuid, uuid, text)
   to service_role;
@@ -235,6 +282,8 @@ grant execute on function public.reserve_listing_upload_cleanup(uuid, uuid, text
 grant execute on function public.complete_listing_image_cleanup(uuid)
   to service_role;
 grant execute on function public.fail_listing_image_cleanup(uuid, text)
+  to service_role;
+grant execute on function public.claim_listing_image_cleanup_jobs(integer, uuid)
   to service_role;
 
 create or replace function public.publish_listing_with_image_policy(
@@ -284,3 +333,46 @@ revoke execute on function public.publish_listing_with_image_policy(uuid, uuid)
   from public, anon, authenticated;
 grant execute on function public.publish_listing_with_image_policy(uuid, uuid)
   to service_role;
+
+create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_net with schema extensions;
+
+do $$
+declare
+  existing_job_id bigint;
+begin
+  if exists (
+    select 1 from vault.decrypted_secrets where name = 'project_url'
+  ) and exists (
+    select 1 from vault.decrypted_secrets where name = 'service_role_key'
+  ) then
+    select jobid into existing_job_id
+    from cron.job
+    where jobname = 'listing-image-cleanup-retry';
+    if existing_job_id is not null then
+      perform cron.unschedule(existing_job_id);
+    end if;
+
+    perform cron.schedule(
+      'listing-image-cleanup-retry',
+      '*/5 * * * *',
+      $command$
+        select net.http_post(
+          url := (
+            select decrypted_secret from vault.decrypted_secrets
+            where name = 'project_url'
+          ) || '/functions/v1/listing-image-cleanup-retry',
+          headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer ' || (
+              select decrypted_secret from vault.decrypted_secrets
+              where name = 'service_role_key'
+            )
+          ),
+          body := '{}'::jsonb
+        );
+      $command$
+    );
+  end if;
+end;
+$$;

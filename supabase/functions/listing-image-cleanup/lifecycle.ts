@@ -30,6 +30,15 @@ export interface LifecycleCleanupReservation {
   jobs: LifecycleCleanupJob[];
 }
 
+export interface CleanupRetryDatabase {
+  claimCleanupJobs(input: {
+    limit: number;
+    sellerId?: string;
+  }): Promise<LifecycleCleanupJob[]>;
+  completeCleanupJob(jobId: string): Promise<void>;
+  failCleanupJob(jobId: string, message: string): Promise<void>;
+}
+
 export interface LifecycleDatabase {
   getOwnedListing(
     userId: string,
@@ -73,6 +82,40 @@ export interface LifecycleDatabase {
 
 export interface LifecycleStorage {
   remove(storageKeys: string[]): Promise<void>;
+}
+
+export function createCleanupRetryConsumer({
+  database,
+  storage,
+}: {
+  database: CleanupRetryDatabase;
+  storage: LifecycleStorage;
+}) {
+  return {
+    async run({ limit, sellerId }: { limit: number; sellerId?: string }) {
+      const boundedLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
+      const jobs = await database.claimCleanupJobs({
+        limit: boundedLimit,
+        ...(sellerId ? { sellerId } : {}),
+      });
+      let completed = 0;
+      let failed = 0;
+      for (const job of jobs) {
+        try {
+          await storage.remove([job.storageKey]);
+          await database.completeCleanupJob(job.id);
+          completed += 1;
+        } catch (error) {
+          await database.failCleanupJob(
+            job.id,
+            error instanceof Error ? error.message : "Storage cleanup failed.",
+          );
+          failed += 1;
+        }
+      }
+      return { claimed: jobs.length, completed, failed };
+    },
+  };
 }
 
 export interface PublishLifecycleAction {

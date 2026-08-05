@@ -97,7 +97,9 @@ export async function deleteManagedListing({
     return {
       ok: true as const,
       status: result.status,
-      message: "Listing deleted.",
+      message: result.cleanupPending
+        ? "Listing deleted. Permanent photo cleanup is queued and will retry automatically."
+        : "Listing deleted.",
     };
   } catch (error) {
     return {

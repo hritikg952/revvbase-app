@@ -211,7 +211,9 @@ export async function removeListingPhoto({
       ok: true,
       images: images.filter((candidate) => candidate.id !== image.id),
       status: result.status,
-      message: result.status === "draft"
+      message: result.cleanupPending
+        ? "Photo removed. Permanent file cleanup is queued and will retry automatically."
+        : result.status === "draft"
         ? "Photo removed. Your listing is now a draft until you add a photo and publish it again."
         : "Photo removed.",
     };
