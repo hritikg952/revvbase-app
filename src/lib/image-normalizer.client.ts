@@ -33,6 +33,7 @@ const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const RIFF_SIGNATURE = [0x52, 0x49, 0x46, 0x46];
 const WEBP_SIGNATURE = [0x57, 0x45, 0x42, 0x50];
+const MAX_DIMENSION_HEADER_BYTES = 64 * 1024;
 
 function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean {
   return signature.every((byte, index) => bytes[offset + index] === byte);
@@ -40,6 +41,102 @@ function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean
 
 function ascii(bytes: Uint8Array, start: number, length: number): string {
   return String.fromCharCode(...bytes.slice(start, start + length));
+}
+
+interface SourceDimensions {
+  width: number;
+  height: number;
+}
+
+function readUint24LittleEndian(bytes: Uint8Array, offset: number): number {
+  return bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+}
+
+function parseJpegDimensions(bytes: Uint8Array): SourceDimensions | null {
+  let offset = 2;
+  const startOfFrameMarkers = new Set([
+    0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce,
+    0xcf,
+  ]);
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    while (bytes[offset] === 0xff) offset += 1;
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (marker === 0xda) return null;
+    if (offset + 1 >= bytes.length) return null;
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) return null;
+    if (startOfFrameMarkers.has(marker) && segmentLength >= 7) {
+      return {
+        height: (bytes[offset + 3] << 8) | bytes[offset + 4],
+        width: (bytes[offset + 5] << 8) | bytes[offset + 6],
+      };
+    }
+    offset += segmentLength;
+  }
+  return null;
+}
+
+function parseWebpDimensions(bytes: Uint8Array): SourceDimensions | null {
+  const chunk = ascii(bytes, 12, 4);
+  if (chunk === "VP8X" && bytes.length >= 30) {
+    return {
+      width: readUint24LittleEndian(bytes, 24) + 1,
+      height: readUint24LittleEndian(bytes, 27) + 1,
+    };
+  }
+  if (chunk === "VP8L" && bytes.length >= 25 && bytes[20] === 0x2f) {
+    return {
+      width: 1 + bytes[21] + ((bytes[22] & 0x3f) << 8),
+      height:
+        1 + ((bytes[22] & 0xc0) >> 6) + (bytes[23] << 2) +
+        ((bytes[24] & 0x0f) << 10),
+    };
+  }
+  if (
+    chunk === "VP8 " && bytes.length >= 30 && bytes[23] === 0x9d &&
+    bytes[24] === 0x01 && bytes[25] === 0x2a
+  ) {
+    return {
+      width: (bytes[26] | (bytes[27] << 8)) & 0x3fff,
+      height: (bytes[28] | (bytes[29] << 8)) & 0x3fff,
+    };
+  }
+  return null;
+}
+
+async function parseSourceDimensions(
+  file: File,
+  sourceMimeType: ListingImageSourceMimeType,
+): Promise<SourceDimensions | null> {
+  // HEIC/HEIF dimensions can be nested in ISO-BMFF item properties. Do not
+  // claim a safe pre-decode result until a bounded parser covers that graph.
+  if (sourceMimeType === "image/heic" || sourceMimeType === "image/heif") {
+    return null;
+  }
+  const bytes = new Uint8Array(
+    await file.slice(0, MAX_DIMENSION_HEADER_BYTES).arrayBuffer(),
+  );
+  if (sourceMimeType === "image/png" && bytes.length >= 24) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+  if (sourceMimeType === "image/jpeg") return parseJpegDimensions(bytes);
+  if (sourceMimeType === "image/webp") return parseWebpDimensions(bytes);
+  return null;
+}
+
+function exceedsPixelLimit(
+  dimensions: SourceDimensions,
+  maxPixels: number,
+): boolean {
+  return dimensions.width <= 0 || dimensions.height <= 0 ||
+    dimensions.width > Math.floor(maxPixels / dimensions.height);
 }
 
 async function detectSourceMimeType(
@@ -205,6 +302,26 @@ export async function normalizeListingImage(
     );
   }
 
+  try {
+    const headerDimensions = await parseSourceDimensions(file, sourceMimeType);
+    if (
+      headerDimensions &&
+      exceedsPixelLimit(headerDimensions, images.sourceSafety.maxPixels)
+    ) {
+      return failure(
+        file,
+        "source-dimensions-too-large",
+        `${file.name} has dimensions that are too large to process safely.`,
+      );
+    }
+  } catch {
+    return failure(
+      file,
+      "decode-failed",
+      `${file.name} could not be used. Choose a supported photo file.`,
+    );
+  }
+
   let bitmap: ImageBitmap;
   try {
     bitmap = await decodeSourceBitmap(file, sourceMimeType);
@@ -218,9 +335,7 @@ export async function normalizeListingImage(
 
   try {
     if (
-      bitmap.width <= 0 ||
-      bitmap.height <= 0 ||
-      bitmap.width * bitmap.height > images.sourceSafety.maxPixels
+      exceedsPixelLimit(bitmap, images.sourceSafety.maxPixels)
     ) {
       return failure(
         file,
