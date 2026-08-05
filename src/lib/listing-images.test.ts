@@ -57,6 +57,37 @@ function webpBlob(size: number, type = "image/webp"): Blob {
   return new Blob([bytes], { type });
 }
 
+function lateSofJpeg(width: number, height: number): File {
+  const appLength = 65_535;
+  const bytes = new Uint8Array(2 + 2 + appLength + 19);
+  bytes.set([0xff, 0xd8, 0xff, 0xe1, 0xff, 0xff], 0);
+  const sof = 2 + 2 + appLength;
+  bytes.set([
+    0xff, 0xc0, 0x00, 0x11, 0x08,
+    (height >>> 8) & 0xff, height & 0xff,
+    (width >>> 8) & 0xff, width & 0xff,
+    0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
+  ], sof);
+  return new File([bytes], "late-sof.jpg", { type: "image/jpeg" });
+}
+
+function heicWithIspe(width: number, height: number): File {
+  const bytes = new Uint8Array(60);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 24);
+  bytes.set([0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63], 4);
+  bytes.set([0x68, 0x65, 0x69, 0x63], 16);
+  view.setUint32(24, 36);
+  bytes.set([0x6d, 0x65, 0x74, 0x61], 28);
+  view.setUint32(36, 24);
+  bytes.set([0x69, 0x70, 0x72, 0x70], 40);
+  view.setUint32(44, 16);
+  bytes.set([0x69, 0x73, 0x70, 0x65], 48);
+  view.setUint32(52, width);
+  view.setUint32(56, height);
+  return new File([bytes], "pixel-bomb.heic", { type: "image/heic" });
+}
+
 function installBrowserImageHarness(outputs: Blob[]) {
   const qualities: number[] = [];
   const drawImage = vi.fn();
@@ -865,6 +896,32 @@ describe("listing image normalization", () => {
       fileName: "pixel-bomb.png",
     });
     expect(harness.createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized late-SOF JPEG before browser decoding", async () => {
+    const harness = installBrowserImageHarness([]);
+
+    const result = await normalizeListingImage(lateSofJpeg(10_000, 10_000));
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "source-dimensions-too-large",
+      fileName: "late-sof.jpg",
+    });
+    expect(harness.createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized HEIC ispe dimensions before invoking heic-to", async () => {
+    installBrowserImageHarness([]);
+
+    const result = await normalizeListingImage(heicWithIspe(10_000, 10_000));
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "source-dimensions-too-large",
+      fileName: "pixel-bomb.heic",
+    });
+    expect(heicToMock).not.toHaveBeenCalled();
   });
 
   it("returns a bounded cannot-fit error when every quality exceeds 1 MB", async () => {
