@@ -34,6 +34,7 @@ interface ListingImageManagerProps {
   executeLifecycle: (
     action: ListingImageLifecycleAction,
   ) => Promise<ListingImageLifecycleResult>;
+  onStatusChange?: (status: ListingLifecycleStatus) => void;
   settings?: AppSettings;
 }
 
@@ -44,6 +45,7 @@ export function ListingImageManager({
   initialStatus,
   storage,
   executeLifecycle,
+  onStatusChange,
   settings = appSettings,
 }: ListingImageManagerProps) {
   const inputId = useId();
@@ -144,6 +146,7 @@ export function ListingImageManager({
       execute: executeLifecycle,
     });
     setStatus(result.status);
+    onStatusChange?.(result.status);
     if (result.ok) {
       setImages((current) => current.filter((row) => row.id !== image.id));
     }
@@ -169,6 +172,7 @@ export function ListingImageManager({
       execute: executeLifecycle,
     });
     setStatus(result.status);
+    onStatusChange?.(result.status);
     setStatusFeedback({
       kind: result.ok ? "success" : "error",
       message: result.message,

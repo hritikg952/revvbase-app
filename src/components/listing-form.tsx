@@ -9,7 +9,10 @@ import {
   createListingThroughPublication,
   getListingFieldUpdate,
 } from "@/lib/listing-form-workflow";
-import { invokeListingImageLifecycle } from "@/lib/listing-image-lifecycle-client";
+import {
+  invokeListingImageLifecycle,
+  type ListingLifecycleStatus,
+} from "@/lib/listing-image-lifecycle-client";
 import { getImageLifecycleCopy } from "@/lib/listing-images";
 import {
   emptyListingForm,
@@ -23,9 +26,10 @@ import { createBrowserListingImageStorage } from "@/lib/storage/browser-listing-
 
 interface ListingFormProps {
   listing?: Listing;
+  onLifecycleStatusChange?: (status: ListingLifecycleStatus) => void;
 }
 
-export function ListingForm({ listing }: ListingFormProps) {
+export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormProps) {
   const router = useRouter();
   const { user } = useAuth();
   const [values, setValues] = useState<ListingFormValues>(
@@ -182,6 +186,7 @@ export function ListingForm({ listing }: ListingFormProps) {
           initialStatus={listing.status}
           storage={imageStorage}
           executeLifecycle={invokeListingImageLifecycle}
+          onStatusChange={onLifecycleStatusChange}
         />
       )}
 

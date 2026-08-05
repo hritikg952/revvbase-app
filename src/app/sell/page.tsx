@@ -2,6 +2,7 @@
 
 import { AuthRequired } from "@/components/auth-required";
 import { ListingForm } from "@/components/listing-form";
+import { getCreateListingGuidance } from "@/lib/listing-form-workflow";
 
 export default function SellPage() {
   return (
@@ -10,7 +11,7 @@ export default function SellPage() {
         <div className="page-heading">
           <p className="eyebrow">Create a listing</p>
           <h1>Tell the next owner about your ride.</h1>
-          <p>Share the essentials. You can leave the image blank and use our stock placeholder.</p>
+          <p>Share the essentials. {getCreateListingGuidance()}</p>
         </div>
         <ListingForm />
       </AuthRequired>

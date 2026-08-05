@@ -7,6 +7,7 @@ import { AuthRequired } from "@/components/auth-required";
 import { useAuth } from "@/components/auth-provider";
 import { ListingForm } from "@/components/listing-form";
 import type { Listing } from "@/lib/database.types";
+import { getListingEditPageCopy } from "@/lib/listing-form-workflow";
 import { getImageLifecycleCopy } from "@/lib/listing-images";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -53,10 +54,10 @@ export default function EditListingPage() {
         ) : (
           <>
             <div className="page-heading">
-              <p className="eyebrow">{listing.status === "draft" ? "Edit draft" : "Edit listing"}</p>
+              <p className="eyebrow">{getListingEditPageCopy(listing.status).eyebrow}</p>
               <h1>{listing.make} {listing.model}</h1>
-              {listing.status === "draft" && (
-                <p>This listing is visible only in your garage until protected publication succeeds.</p>
+              {getListingEditPageCopy(listing.status).visibilityNotice && (
+                <p>{getListingEditPageCopy(listing.status).visibilityNotice}</p>
               )}
             </div>
             {listing.status === "draft" && searchParams.get("created") === "draft" && (
@@ -66,7 +67,11 @@ export default function EditListingPage() {
                   : "Your listing was saved as a draft."}
               </div>
             )}
-            <ListingForm listing={listing} />
+            <ListingForm
+              listing={listing}
+              onLifecycleStatusChange={(status) =>
+                setListing((current) => current ? { ...current, status } : current)}
+            />
           </>
         )}
       </AuthRequired>

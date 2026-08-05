@@ -2,6 +2,11 @@ import {
   ListingImageLifecycleClientError,
   type ListingLifecycleStatus,
 } from "./listing-image-lifecycle-client";
+import {
+  appSettings,
+  getImageLifecycleCopy,
+  type AppSettings,
+} from "./listing-images";
 
 interface CreateListingThroughPublicationInput {
   draftNotice: string;
@@ -16,6 +21,24 @@ export interface CreateListingOutcome {
   status: Extract<ListingLifecycleStatus, "draft" | "active">;
   destination: string;
   notice: string | null;
+}
+
+export function getCreateListingGuidance(
+  settings: AppSettings = appSettings,
+): string {
+  return getImageLifecycleCopy(settings).emptyState;
+}
+
+export function getListingEditPageCopy(
+  status: ListingLifecycleStatus,
+): { eyebrow: string; visibilityNotice: string | null } {
+  return status === "draft"
+    ? {
+        eyebrow: "Edit draft",
+        visibilityNotice:
+          "This listing is visible only in your garage until protected publication succeeds.",
+      }
+    : { eyebrow: "Edit listing", visibilityNotice: null };
 }
 
 export async function createListingThroughPublication({
