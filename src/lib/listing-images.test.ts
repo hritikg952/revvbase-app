@@ -432,6 +432,25 @@ describe("draft-first listing publication", () => {
     });
   });
 
+  it("keeps a saved draft reachable after a generic publication failure", async () => {
+    const persistDraft = vi.fn().mockResolvedValue({ id: "listing-4" });
+
+    const outcome = await createListingThroughPublication({
+      draftNotice: "Your listing is ready to publish without photos.",
+      persistDraft,
+      publish: vi.fn().mockRejectedValue(new Error("network timeout")),
+    });
+
+    expect(persistDraft).toHaveBeenCalledOnce();
+    expect(outcome).toEqual({
+      listingId: "listing-4",
+      status: "draft",
+      destination: "/listings/listing-4/edit?created=draft",
+      notice:
+        "Your listing was saved as a draft, but publication could not be completed. Try publishing again from this page.",
+    });
+  });
+
   it("never writes owner or lifecycle fields during an existing listing field update", () => {
     expect(
       getListingFieldUpdate({
