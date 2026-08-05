@@ -94,17 +94,43 @@ function createFixture({
         (image) => image.listingId !== listingId,
       );
     },
-    async reserveImageDeletion({ listingId, imageId }) {
+    async reserveImageDeletion({ userId, listingId, imageId, storageKey }) {
       events.push(`reserve-image-deletion:${listingId}:${imageId}`);
       const image = currentImages.find(
         (candidate) => candidate.listingId === listingId && candidate.id === imageId,
       );
-      assert.ok(image);
+      if (!image || image.storageKey !== storageKey || currentListing?.sellerId !== userId) {
+        throw new LifecycleError(
+          "image_binding_mismatch",
+          "The photo does not belong to this listing.",
+          403,
+        );
+      }
       if (imagesRequired && currentListing?.status === "active" && currentImages.length === 1) {
         currentListing = { ...currentListing, status: "draft" };
       }
       currentImages = currentImages.filter((candidate) => candidate.id !== imageId);
       const job = { id: `job-${image.id}`, storageKey: image.storageKey };
+      pendingCleanup.push(job);
+      return { status: currentListing?.status ?? "deleted", jobs: [job] };
+    },
+    async reserveListingDeletion({ userId, listingId }) {
+      events.push(`reserve-listing-deletion:${listingId}`);
+      assert.equal(currentListing?.sellerId, userId);
+      const jobs = currentImages.map((image) => ({
+        id: `job-${image.id}`,
+        storageKey: image.storageKey,
+      }));
+      pendingCleanup.push(...jobs);
+      currentImages = [];
+      assert.ok(currentListing);
+      currentListing = { ...currentListing, status: "deleted" };
+      return { status: "deleted", jobs };
+    },
+    async reserveUploadCleanup({ userId, listingId, storageKey }) {
+      events.push(`reserve-upload-cleanup:${listingId}:${storageKey}`);
+      assert.equal(currentListing?.sellerId, userId);
+      const job = { id: `job-${storageKey}`, storageKey };
       pendingCleanup.push(job);
       return { status: currentListing?.status ?? "deleted", jobs: [job] };
     },
@@ -115,6 +141,20 @@ function createFixture({
     },
     async failCleanupJob(jobId) {
       events.push(`fail-cleanup:${jobId}`);
+    },
+    async publishListing({ userId, listingId }) {
+      events.push(`publish-listing:${listingId}`);
+      assert.equal(currentListing?.sellerId, userId);
+      const requiredWithoutImage = imagesRequired &&
+        (imageCount ?? currentImages.length) === 0;
+      if (!requiredWithoutImage) {
+        assert.ok(currentListing);
+        currentListing = { ...currentListing, status: "active" };
+      }
+      return {
+        status: currentListing?.status ?? "deleted",
+        imageRequired: requiredWithoutImage,
+      };
     },
   };
 
@@ -150,9 +190,7 @@ test("publishes an owned zero-image draft when the server policy is optional", a
   assert.equal(fixture.listing()?.status, "active");
   assert.deepEqual(fixture.events, [
     `get-owned-listing:${OWNER_ID}:${LISTING_ID}`,
-    "get-images-required",
-    `count-images:${LISTING_ID}`,
-    "transition:draft->active",
+    `publish-listing:${LISTING_ID}`,
   ]);
 });
 
@@ -250,7 +288,7 @@ const IMAGE_TWO = {
   position: 1,
 };
 
-test("removes a non-final image object before its metadata", async () => {
+test("removes a non-final image after its metadata is durably reserved", async () => {
   const fixture = createFixture({
     imagesRequired: true,
     listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
@@ -267,8 +305,8 @@ test("removes a non-final image object before its metadata", async () => {
   assert.equal(result.status, "active");
   assert.deepEqual(fixture.images(), [IMAGE_ONE]);
   assert.ok(
-    fixture.events.indexOf(`remove-objects:${IMAGE_TWO.storageKey}`) <
-      fixture.events.indexOf(`delete-metadata:${LISTING_ID}:${IMAGE_TWO.id}`),
+    fixture.events.indexOf(`reserve-image-deletion:${LISTING_ID}:${IMAGE_TWO.id}`) <
+      fixture.events.indexOf(`remove-objects:${IMAGE_TWO.storageKey}`),
   );
   assert.ok(!fixture.events.some((event) => event.startsWith("transition:")));
 });
@@ -342,17 +380,16 @@ test("moves an active required listing to draft before removing its final image"
   assert.equal(result.status, "draft");
   assert.equal(fixture.listing()?.status, "draft");
   assert.deepEqual(fixture.images(), []);
-  const transition = fixture.events.indexOf("transition:active->draft");
+  const reservation = fixture.events.indexOf(
+    `reserve-image-deletion:${LISTING_ID}:${IMAGE_ONE.id}`,
+  );
   const objectRemoval = fixture.events.indexOf(
     `remove-objects:${IMAGE_ONE.storageKey}`,
   );
-  const metadataRemoval = fixture.events.indexOf(
-    `delete-metadata:${LISTING_ID}:${IMAGE_ONE.id}`,
-  );
-  assert.ok(transition < objectRemoval && objectRemoval < metadataRemoval);
+  assert.ok(reservation < objectRemoval);
 });
 
-test("keeps retryable metadata and draft status when final-image object removal fails", async () => {
+test("keeps durable cleanup pending when final-image object removal fails", async () => {
   const fixture = createFixture({
     imagesRequired: true,
     listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
@@ -360,57 +397,27 @@ test("keeps retryable metadata and draft status when final-image object removal 
     failStorageRemoval: true,
   });
 
-  await assert.rejects(
-    fixture.lifecycle.execute(OWNER_ID, {
-      action: "delete-image",
-      listingId: LISTING_ID,
-      imageId: IMAGE_ONE.id,
-      storageKey: IMAGE_ONE.storageKey,
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof LifecycleError);
-      assert.equal(error.code, "storage_remove_failed");
-      assert.equal(error.retryable, true);
-      assert.equal(error.listingStatus, "draft");
-      return true;
-    },
-  );
-
-  assert.equal(fixture.listing()?.status, "draft");
-  assert.deepEqual(fixture.images(), [IMAGE_ONE]);
-  assert.ok(!fixture.events.some((event) => event.startsWith("delete-metadata:")));
-});
-
-test("keeps retryable metadata and draft status when final-image metadata removal fails", async () => {
-  const fixture = createFixture({
-    imagesRequired: true,
-    listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
-    images: [IMAGE_ONE],
-    failMetadataRemoval: true,
+  const result = await fixture.lifecycle.execute(OWNER_ID, {
+    action: "delete-image",
+    listingId: LISTING_ID,
+    imageId: IMAGE_ONE.id,
+    storageKey: IMAGE_ONE.storageKey,
   });
 
-  await assert.rejects(
-    fixture.lifecycle.execute(OWNER_ID, {
-      action: "delete-image",
-      listingId: LISTING_ID,
-      imageId: IMAGE_ONE.id,
-      storageKey: IMAGE_ONE.storageKey,
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof LifecycleError);
-      assert.equal(error.code, "metadata_remove_failed");
-      assert.equal(error.retryable, true);
-      assert.equal(error.listingStatus, "draft");
-      return true;
-    },
-  );
-
+  assert.deepEqual(result, {
+    action: "delete-image",
+    listingId: LISTING_ID,
+    status: "draft",
+    cleanupPending: true,
+  });
   assert.equal(fixture.listing()?.status, "draft");
-  assert.deepEqual(fixture.images(), [IMAGE_ONE]);
-  assert.ok(fixture.events.includes(`remove-objects:${IMAGE_ONE.storageKey}`));
+  assert.deepEqual(fixture.images(), []);
+  assert.deepEqual(fixture.pendingCleanup(), [
+    { id: `job-${IMAGE_ONE.id}`, storageKey: IMAGE_ONE.storageKey },
+  ]);
 });
 
-test("removes every listing object, then metadata, then marks the row deleted", async () => {
+test("marks the listing deleted and reserves every object before cleanup", async () => {
   const fixture = createFixture({
     imagesRequired: false,
     listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
@@ -424,17 +431,12 @@ test("removes every listing object, then metadata, then marks the row deleted", 
 
   assert.equal(result.status, "deleted");
   assert.deepEqual(fixture.images(), []);
-  const objects = fixture.events.indexOf(
-    `remove-objects:${IMAGE_ONE.storageKey},${IMAGE_TWO.storageKey}`,
-  );
-  const metadata = fixture.events.indexOf(
-    `delete-listing-metadata:${LISTING_ID}`,
-  );
-  const status = fixture.events.indexOf("transition:active->deleted");
-  assert.ok(objects < metadata && metadata < status);
+  const reservation = fixture.events.indexOf(`reserve-listing-deletion:${LISTING_ID}`);
+  assert.ok(reservation < fixture.events.indexOf(`remove-objects:${IMAGE_ONE.storageKey}`));
+  assert.ok(reservation < fixture.events.indexOf(`remove-objects:${IMAGE_TWO.storageKey}`));
 });
 
-test("preserves listing status and metadata when listing object cleanup fails", async () => {
+test("keeps a deleted listing hidden while failed object cleanup remains durable", async () => {
   const fixture = createFixture({
     imagesRequired: false,
     listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
@@ -442,24 +444,18 @@ test("preserves listing status and metadata when listing object cleanup fails", 
     failStorageRemoval: true,
   });
 
-  await assert.rejects(
-    fixture.lifecycle.execute(OWNER_ID, {
-      action: "delete-listing",
-      listingId: LISTING_ID,
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof LifecycleError);
-      assert.equal(error.code, "storage_remove_failed");
-      assert.equal(error.retryable, true);
-      assert.equal(error.listingStatus, "active");
-      return true;
-    },
-  );
+  const result = await fixture.lifecycle.execute(OWNER_ID, {
+    action: "delete-listing",
+    listingId: LISTING_ID,
+  });
 
-  assert.equal(fixture.listing()?.status, "active");
-  assert.deepEqual(fixture.images(), [IMAGE_ONE]);
-  assert.ok(!fixture.events.includes(`delete-listing-metadata:${LISTING_ID}`));
-  assert.ok(!fixture.events.includes("transition:active->deleted"));
+  assert.equal(result.status, "deleted");
+  assert.equal(result.cleanupPending, true);
+  assert.equal(fixture.listing()?.status, "deleted");
+  assert.deepEqual(fixture.images(), []);
+  assert.deepEqual(fixture.pendingCleanup(), [
+    { id: `job-${IMAGE_ONE.id}`, storageKey: IMAGE_ONE.storageKey },
+  ]);
 });
 
 test("rejects a forged storage key without removing the authoritative image", async () => {

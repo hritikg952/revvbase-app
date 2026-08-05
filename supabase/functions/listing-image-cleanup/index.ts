@@ -7,6 +7,7 @@ import {
   createListingImageLifecycle,
   parseListingImageLifecycleAction,
   type LifecycleDatabase,
+  type LifecycleCleanupReservation,
   type ListingLifecycleStatus,
 } from "./lifecycle.ts";
 
@@ -23,6 +24,24 @@ function json(body: unknown, status = 200): Response {
 }
 
 function createDatabase(client: ReturnType<typeof createClient>): LifecycleDatabase {
+  function toReservation(data: Array<{
+    listing_status: ListingLifecycleStatus;
+    cleanup_job_id: string | null;
+    cleanup_storage_key: string | null;
+  }> | null): LifecycleCleanupReservation {
+    const rows = data ?? [];
+    const status = rows[0]?.listing_status;
+    if (!status) throw new Error("The cleanup reservation returned no status.");
+    return {
+      status,
+      jobs: rows.flatMap((row) =>
+        row.cleanup_job_id && row.cleanup_storage_key
+          ? [{ id: row.cleanup_job_id, storageKey: row.cleanup_storage_key }]
+          : []
+      ),
+    };
+  }
+
   return {
     async getOwnedListing(userId, listingId) {
       const { data, error } = await client
@@ -157,6 +176,63 @@ function createDatabase(client: ReturnType<typeof createClient>): LifecycleDatab
         .delete()
         .eq("listing_id", listingId);
       if (error) throw error;
+    },
+
+    async reserveImageDeletion({ userId, listingId, imageId, storageKey }) {
+      const { data, error } = await client.rpc("reserve_listing_image_deletion", {
+        p_user_id: userId,
+        p_listing_id: listingId,
+        p_image_id: imageId,
+        p_storage_key: storageKey,
+      });
+      if (error) throw error;
+      return toReservation(data);
+    },
+
+    async reserveListingDeletion({ userId, listingId }) {
+      const { data, error } = await client.rpc("reserve_listing_deletion", {
+        p_user_id: userId,
+        p_listing_id: listingId,
+      });
+      if (error) throw error;
+      return toReservation(data);
+    },
+
+    async reserveUploadCleanup({ userId, listingId, storageKey }) {
+      const { data, error } = await client.rpc("reserve_listing_upload_cleanup", {
+        p_user_id: userId,
+        p_listing_id: listingId,
+        p_storage_key: storageKey,
+      });
+      if (error) throw error;
+      return toReservation(data);
+    },
+
+    async completeCleanupJob(jobId) {
+      const { error } = await client.rpc("complete_listing_image_cleanup", {
+        p_job_id: jobId,
+      });
+      if (error) throw error;
+    },
+
+    async failCleanupJob(jobId, message) {
+      const { error } = await client.rpc("fail_listing_image_cleanup", {
+        p_job_id: jobId,
+        p_error: message,
+      });
+      if (error) throw error;
+    },
+
+    async publishListing({ userId, listingId }) {
+      const { data, error } = await client.rpc("publish_listing_with_image_policy", {
+        p_user_id: userId,
+        p_listing_id: listingId,
+      });
+      if (error || !data?.[0]) throw error ?? new Error("Publication returned no status.");
+      return {
+        status: data[0].listing_status as ListingLifecycleStatus,
+        imageRequired: data[0].image_required,
+      };
     },
   };
 }

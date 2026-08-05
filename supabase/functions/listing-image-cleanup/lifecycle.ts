@@ -20,6 +20,16 @@ export interface ListingStatusTransition {
   nextStatus: ListingLifecycleStatus;
 }
 
+export interface LifecycleCleanupJob {
+  id: string;
+  storageKey: string;
+}
+
+export interface LifecycleCleanupReservation {
+  status: ListingLifecycleStatus;
+  jobs: LifecycleCleanupJob[];
+}
+
 export interface LifecycleDatabase {
   getOwnedListing(
     userId: string,
@@ -38,6 +48,27 @@ export interface LifecycleDatabase {
   listImages(listingId: string): Promise<LifecycleImage[]>;
   deleteImageMetadata(listingId: string, imageId: string): Promise<void>;
   deleteListingImageMetadata(listingId: string): Promise<void>;
+  reserveImageDeletion(input: {
+    userId: string;
+    listingId: string;
+    imageId: string;
+    storageKey: string;
+  }): Promise<LifecycleCleanupReservation>;
+  reserveListingDeletion(input: {
+    userId: string;
+    listingId: string;
+  }): Promise<LifecycleCleanupReservation>;
+  reserveUploadCleanup(input: {
+    userId: string;
+    listingId: string;
+    storageKey: string;
+  }): Promise<LifecycleCleanupReservation>;
+  completeCleanupJob(jobId: string): Promise<void>;
+  failCleanupJob(jobId: string, message: string): Promise<void>;
+  publishListing(input: {
+    userId: string;
+    listingId: string;
+  }): Promise<{ status: ListingLifecycleStatus; imageRequired: boolean }>;
 }
 
 export interface LifecycleStorage {
@@ -77,6 +108,7 @@ export interface ListingLifecycleResult {
   action: ListingImageLifecycleAction["action"];
   listingId: string;
   status: ListingLifecycleStatus;
+  cleanupPending?: boolean;
 }
 
 export type LifecycleErrorCode =
@@ -161,23 +193,23 @@ export function createListingImageLifecycle({
   database,
   storage,
 }: CreateListingImageLifecycleOptions) {
-  async function removeObjects(
-    storageKeys: string[],
-    listingStatus: ListingLifecycleStatus,
-  ): Promise<void> {
-    if (storageKeys.length === 0) return;
-
-    try {
-      await storage.remove(storageKeys);
-    } catch {
-      throw new LifecycleError(
-        "storage_remove_failed",
-        "The photo files could not be removed. Please try again.",
-        502,
-        true,
-        listingStatus,
-      );
+  async function processCleanupJobs(
+    jobs: LifecycleCleanupJob[],
+  ): Promise<boolean> {
+    let cleanupPending = false;
+    for (const job of jobs) {
+      try {
+        await storage.remove([job.storageKey]);
+        await database.completeCleanupJob(job.id);
+      } catch (error) {
+        cleanupPending = true;
+        await database.failCleanupJob(
+          job.id,
+          error instanceof Error ? error.message : "Storage cleanup failed.",
+        );
+      }
     }
+    return cleanupPending;
   }
 
   async function removeImageMetadata(
@@ -265,9 +297,11 @@ export function createListingImageLifecycle({
           );
         }
 
-        const imagesRequired = await database.getImagesRequired();
-        const imageCount = await database.countImages(action.listingId);
-        if (imagesRequired && imageCount === 0) {
+        const publication = await database.publishListing({
+          userId,
+          listingId: action.listingId,
+        });
+        if (publication.imageRequired) {
           throw new LifecycleError(
             "image_required",
             "Add at least one photo before publishing this listing.",
@@ -277,17 +311,10 @@ export function createListingImageLifecycle({
           );
         }
 
-        const activeListing = await database.transitionListingStatus({
-          userId,
-          listingId: action.listingId,
-          expectedStatus: "draft",
-          nextStatus: "active",
-        });
-
         return {
           action: action.action,
           listingId: action.listingId,
-          status: activeListing.status,
+          status: publication.status,
         };
       }
 
@@ -309,25 +336,18 @@ export function createListingImageLifecycle({
           );
         }
 
-        let currentStatus = listing.status;
-        const imagesRequired = await database.getImagesRequired();
-        const imageCount = await database.countImages(action.listingId);
-        if (imagesRequired && listing.status === "active" && imageCount === 1) {
-          const draftListing = await database.transitionListingStatus({
-            userId,
-            listingId: action.listingId,
-            expectedStatus: "active",
-            nextStatus: "draft",
-          });
-          currentStatus = draftListing.status;
-        }
-
-        await removeObjects([image.storageKey], currentStatus);
-        await removeImageMetadata(action.listingId, image.id, currentStatus);
+        const reservation = await database.reserveImageDeletion({
+          userId,
+          listingId: action.listingId,
+          imageId: image.id,
+          storageKey: image.storageKey,
+        });
+        const cleanupPending = await processCleanupJobs(reservation.jobs);
         return {
           action: action.action,
           listingId: action.listingId,
-          status: currentStatus,
+          status: reservation.status,
+          ...(cleanupPending ? { cleanupPending: true } : {}),
         };
       }
 
@@ -347,21 +367,16 @@ export function createListingImageLifecycle({
             listing.status,
           );
         }
-        await removeObjects(
-          images.map((image) => image.storageKey),
-          listing.status,
-        );
-        await removeListingMetadata(action.listingId, listing.status);
-        const deletedListing = await database.transitionListingStatus({
+        const reservation = await database.reserveListingDeletion({
           userId,
           listingId: action.listingId,
-          expectedStatus: listing.status,
-          nextStatus: "deleted",
         });
+        const cleanupPending = await processCleanupJobs(reservation.jobs);
         return {
           action: action.action,
           listingId: action.listingId,
-          status: deletedListing.status,
+          status: reservation.status,
+          ...(cleanupPending ? { cleanupPending: true } : {}),
         };
       }
 
@@ -389,11 +404,17 @@ export function createListingImageLifecycle({
         );
       }
 
-      await removeObjects([action.storageKey], listing.status);
+      const reservation = await database.reserveUploadCleanup({
+        userId,
+        listingId: action.listingId,
+        storageKey: action.storageKey,
+      });
+      const cleanupPending = await processCleanupJobs(reservation.jobs);
       return {
         action: action.action,
         listingId: action.listingId,
-        status: listing.status,
+        status: reservation.status,
+        ...(cleanupPending ? { cleanupPending: true } : {}),
       };
     },
   };
