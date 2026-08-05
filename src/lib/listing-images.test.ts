@@ -10,6 +10,8 @@ import {
 import { normalizeListingImage } from "./image-normalizer.client";
 import {
   createListingThroughPublication,
+  getCreateListingGuidance,
+  getListingEditPageCopy,
   getListingFieldUpdate,
 } from "./listing-form-workflow";
 import {
@@ -322,6 +324,17 @@ describe("listing image settings", () => {
 });
 
 describe("draft-first listing publication", () => {
+  it("uses required-mode photo guidance on the create-listing page", () => {
+    const requiredSettings = parseAppSettings({
+      ...appSettings,
+      images: { ...appSettings.images, required: true },
+    });
+
+    expect(getCreateListingGuidance(requiredSettings)).toBe(
+      "Add at least 1 photo to publish this listing. You can add up to 5 photos.",
+    );
+  });
+
   it("preserves the typed lifecycle payload from a non-2xx Edge Function response", async () => {
     const contextJson = vi.fn().mockResolvedValue({
       error: {
@@ -600,6 +613,23 @@ describe("authoritative listing photo removal", () => {
 });
 
 describe("persisted draft republication", () => {
+  it("switches edit-page messaging to active after protected publication", async () => {
+    const result = await publishPersistedListing({
+      listingId: "listing-1",
+      currentStatus: "draft",
+      execute: vi.fn().mockResolvedValue({
+        action: "publish",
+        listingId: "listing-1",
+        status: "active",
+      }),
+    });
+
+    expect(getListingEditPageCopy(result.status)).toEqual({
+      eyebrow: "Edit listing",
+      visibilityNotice: null,
+    });
+  });
+
   it("requests protected publication and displays only the returned status", async () => {
     const execute = vi.fn().mockResolvedValue({
       action: "publish",
