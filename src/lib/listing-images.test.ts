@@ -27,6 +27,7 @@ import {
   getOrderedPhotoTiles,
   processListingPhotoSelection,
   publishPersistedListing,
+  reconcilePhotoDeletionStatus,
   removeListingPhoto,
 } from "./listing-image-manager";
 import { emptyListingForm, toListingPayload } from "./listings";
@@ -699,6 +700,16 @@ describe("authoritative listing photo removal", () => {
       status: "active",
       message: "Photo could not be removed. It is still on your listing. Try again.",
     });
+  });
+
+  it("does not let an older active deletion response overwrite an authoritative draft", () => {
+    const afterFinalDeletion = reconcilePhotoDeletionStatus("active", "draft");
+    const afterOlderResponse = reconcilePhotoDeletionStatus(
+      afterFinalDeletion,
+      "active",
+    );
+
+    expect(afterOlderResponse).toBe("draft");
   });
 });
 
