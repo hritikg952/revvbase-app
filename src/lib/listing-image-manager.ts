@@ -109,7 +109,15 @@ export async function processListingPhotoSelection({
       "preparing",
       `Preparing ${source.name}…`,
     );
-    const normalized = await normalize(source, settings);
+    let normalized: ListingImageNormalizationResult;
+    try {
+      normalized = await normalize(source, settings);
+    } catch {
+      const message = `${source.name} could not be used. Choose a supported photo file.`;
+      errors.push({ fileName: source.name, message });
+      emit(onFileState, operationId, source.name, "error", message);
+      continue;
+    }
     if (!normalized.ok) {
       const message = normalizationErrorMessage(normalized, settings);
       errors.push({ fileName: source.name, message });
@@ -117,14 +125,14 @@ export async function processListingPhotoSelection({
       continue;
     }
 
-    emit(
-      onFileState,
-      operationId,
-      source.name,
-      "uploading",
-      `Uploading ${source.name}…`,
-    );
     try {
+      emit(
+        onFileState,
+        operationId,
+        source.name,
+        "uploading",
+        `Uploading ${source.name}…`,
+      );
       const image = await upload({
         sellerId,
         listingId,
