@@ -607,6 +607,34 @@ describe("immediate listing photo uploads", () => {
     expect(states).toContainEqual({ fileName: "broken.jpg", phase: "error" });
     expect(states).toContainEqual({ fileName: "ready.jpg", phase: "success" });
   });
+
+  it("assigns distinct operation IDs to separate upload batches", async () => {
+    const source = imageFile("ready.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const canonical = new File(["webp"], "ready.webp", { type: "image/webp" });
+    const ids: string[] = [];
+    const normalize = vi.fn().mockResolvedValue({
+      ok: true,
+      file: canonical,
+      width: 1200,
+      height: 900,
+      sourceMimeType: "image/jpeg",
+    });
+    const upload = vi.fn().mockResolvedValue({ ...cover, id: "image-2" });
+
+    for (let batch = 0; batch < 2; batch += 1) {
+      await processListingPhotoSelection({
+        files: [source],
+        images: [cover],
+        listingId: "listing-1",
+        sellerId: "owner-1",
+        normalize,
+        upload,
+        onFileState: (state) => ids.push(state.id),
+      });
+    }
+
+    expect(new Set(ids).size).toBe(2);
+  });
 });
 
 describe("authoritative listing photo removal", () => {
