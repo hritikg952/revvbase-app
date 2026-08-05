@@ -245,12 +245,20 @@ set search_path = ''
 as $$
 begin
   update public.listing_image_cleanup_jobs
-  set state = case when attempts >= 5 then 'dead' else 'pending' end,
+  set state = case
+        when attempts + case when state = 'pending' then 1 else 0 end >= 5
+          then 'dead'
+        else 'pending'
+      end,
+      attempts = attempts + case when state = 'pending' then 1 else 0 end,
       claimed_at = null,
       next_attempt_at = timezone('utc', now()) +
-        make_interval(secs => least(3600, (30 * power(2, greatest(attempts - 1, 0)))::integer)),
+        make_interval(secs => least(3600, (30 * power(
+          2,
+          greatest(attempts + case when state = 'pending' then 1 else 0 end - 1, 0)
+        ))::integer)),
       last_error = left(p_error, 2000)
-  where id = p_job_id and state = 'processing';
+  where id = p_job_id and state in ('pending', 'processing');
 end;
 $$;
 
