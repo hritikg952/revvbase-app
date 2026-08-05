@@ -40,6 +40,7 @@ function createFixture({
   const events: string[] = [];
   let currentListing = listing;
   let currentImages = [...images];
+  const pendingCleanup: Array<{ id: string; storageKey: string }> = [];
 
   const database: LifecycleDatabase = {
     async getOwnedListing(userId, listingId) {
@@ -93,6 +94,28 @@ function createFixture({
         (image) => image.listingId !== listingId,
       );
     },
+    async reserveImageDeletion({ listingId, imageId }) {
+      events.push(`reserve-image-deletion:${listingId}:${imageId}`);
+      const image = currentImages.find(
+        (candidate) => candidate.listingId === listingId && candidate.id === imageId,
+      );
+      assert.ok(image);
+      if (imagesRequired && currentListing?.status === "active" && currentImages.length === 1) {
+        currentListing = { ...currentListing, status: "draft" };
+      }
+      currentImages = currentImages.filter((candidate) => candidate.id !== imageId);
+      const job = { id: `job-${image.id}`, storageKey: image.storageKey };
+      pendingCleanup.push(job);
+      return { status: currentListing?.status ?? "deleted", jobs: [job] };
+    },
+    async completeCleanupJob(jobId) {
+      events.push(`complete-cleanup:${jobId}`);
+      const index = pendingCleanup.findIndex((job) => job.id === jobId);
+      if (index >= 0) pendingCleanup.splice(index, 1);
+    },
+    async failCleanupJob(jobId) {
+      events.push(`fail-cleanup:${jobId}`);
+    },
   };
 
   const storage: LifecycleStorage = {
@@ -107,6 +130,7 @@ function createFixture({
     lifecycle: createListingImageLifecycle({ database, storage }),
     listing: () => currentListing,
     images: () => currentImages,
+    pendingCleanup: () => pendingCleanup,
   };
 }
 
@@ -247,6 +271,31 @@ test("removes a non-final image object before its metadata", async () => {
       fixture.events.indexOf(`delete-metadata:${LISTING_ID}:${IMAGE_TWO.id}`),
   );
   assert.ok(!fixture.events.some((event) => event.startsWith("transition:")));
+});
+
+test("atomically reserves metadata removal before deleting the storage object", async () => {
+  const fixture = createFixture({
+    imagesRequired: true,
+    listing: { id: LISTING_ID, sellerId: OWNER_ID, status: "active" },
+    images: [IMAGE_ONE, IMAGE_TWO],
+  });
+
+  await fixture.lifecycle.execute(OWNER_ID, {
+    action: "delete-image",
+    listingId: LISTING_ID,
+    imageId: IMAGE_TWO.id,
+    storageKey: IMAGE_TWO.storageKey,
+  });
+
+  const reservation = fixture.events.indexOf(
+    `reserve-image-deletion:${LISTING_ID}:${IMAGE_TWO.id}`,
+  );
+  const objectRemoval = fixture.events.indexOf(
+    `remove-objects:${IMAGE_TWO.storageKey}`,
+  );
+  assert.ok(reservation >= 0);
+  assert.ok(reservation < objectRemoval);
+  assert.deepEqual(fixture.pendingCleanup(), []);
 });
 
 test("moves an active required listing to draft before removing its final image", async () => {
