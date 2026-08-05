@@ -11,6 +11,7 @@ import { normalizeListingImage } from "./image-normalizer.client";
 import {
   createListingThroughPublication,
   getCreateListingGuidance,
+  getCreatedDraftNotice,
   getListingEditPageCopy,
   getListingFieldUpdate,
 } from "./listing-form-workflow";
@@ -446,8 +447,13 @@ describe("draft-first listing publication", () => {
     expect(outcome).toEqual({
       listingId: "listing-4",
       status: "draft",
-      destination: "/listings/listing-4/edit?created=draft",
+      destination: "/listings/listing-4/edit?created=publish-failed",
       notice:
+        "Your listing was saved as a draft, but publication could not be completed. Try publishing again from this page.",
+    });
+    expect(getCreatedDraftNotice("publish-failed")).toEqual({
+      kind: "error",
+      message:
         "Your listing was saved as a draft, but publication could not be completed. Try publishing again from this page.",
     });
   });
