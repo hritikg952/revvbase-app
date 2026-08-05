@@ -17,7 +17,10 @@ import {
   getOwnerListingCards,
   getPublicListingCards,
 } from "./listing-image-consumers";
-import { ListingImageLifecycleClientError } from "./listing-image-lifecycle-client";
+import {
+  invokeListingImageLifecycle,
+  ListingImageLifecycleClientError,
+} from "./listing-image-lifecycle-client";
 import {
   getOrderedPhotoTiles,
   processListingPhotoSelection,
@@ -319,6 +322,42 @@ describe("listing image settings", () => {
 });
 
 describe("draft-first listing publication", () => {
+  it("preserves the typed lifecycle payload from a non-2xx Edge Function response", async () => {
+    const contextJson = vi.fn().mockResolvedValue({
+      error: {
+        code: "image_required",
+        message: "Add at least one photo before publishing this listing.",
+        retryable: false,
+        listingStatus: "draft",
+      },
+    });
+    const client = {
+      functions: {
+        invoke: vi.fn().mockResolvedValue({
+          data: null,
+          error: {
+            message: "Edge Function returned a non-2xx status code",
+            context: { json: contextJson },
+          },
+        }),
+      },
+    };
+
+    await expect(
+      invokeListingImageLifecycle(
+        { action: "publish", listingId: "listing-1" },
+        client,
+      ),
+    ).rejects.toMatchObject({
+      name: "ListingImageLifecycleClientError",
+      code: "image_required",
+      message: "Add at least one photo before publishing this listing.",
+      retryable: false,
+      listingStatus: "draft",
+    });
+    expect(contextJson).toHaveBeenCalledOnce();
+  });
+
   it("persists a draft before protected publication and follows the active server result", async () => {
     const calls: string[] = [];
 
