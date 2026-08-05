@@ -193,6 +193,19 @@ export type RemoveListingPhotoResult =
       message: string;
     };
 
+export function reconcilePhotoDeletionStatus(
+  currentStatus: ListingLifecycleStatus,
+  incomingStatus: ListingLifecycleStatus,
+): ListingLifecycleStatus {
+  if (currentStatus === "deleted" || incomingStatus === "deleted") {
+    return "deleted";
+  }
+  if (currentStatus === "draft" || incomingStatus === "draft") {
+    return "draft";
+  }
+  return "active";
+}
+
 export async function removeListingPhoto({
   image,
   images,
