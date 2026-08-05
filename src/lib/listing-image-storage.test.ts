@@ -4,6 +4,43 @@ import { emptyListingForm, toListingPayload } from "./listings";
 import { createSupabaseListingImageStorage } from "./storage/supabase-listing-images";
 
 describe("listing image storage contract", () => {
+  it("requests protected compensation for the exact object when registration fails", async () => {
+    const upload = vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null });
+    const compensateUpload = vi.fn().mockResolvedValue(undefined);
+    const client = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          upload,
+          getPublicUrl: vi.fn(),
+        }),
+      },
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: "registration unavailable" },
+      }),
+    };
+    const storage = createSupabaseListingImageStorage({
+      client,
+      createObjectId: () => "image-1",
+      compensateUpload,
+    });
+
+    await expect(
+      storage.upload({
+        sellerId: "owner-1",
+        listingId: "listing-1",
+        file: new File(["webp"], "vehicle.webp", { type: "image/webp" }),
+      }),
+    ).rejects.toMatchObject({ code: "registration_failed" });
+
+    expect(compensateUpload).toHaveBeenCalledOnce();
+    expect(compensateUpload).toHaveBeenCalledWith({
+      action: "compensate-upload",
+      listingId: "listing-1",
+      storageKey: "owner-1/listing-1/image-1.webp",
+    });
+  });
+
   it("uploads one canonical image and returns registered ordered metadata", async () => {
     const upload = vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null });
     const getPublicUrl = vi.fn().mockReturnValue({
