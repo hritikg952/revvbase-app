@@ -79,7 +79,13 @@ export async function createListingThroughPublication({
       };
     }
 
-    throw error;
+    return {
+      listingId: draft.id,
+      status: "draft",
+      destination: `/listings/${draft.id}/edit?created=draft`,
+      notice:
+        "Your listing was saved as a draft, but publication could not be completed. Try publishing again from this page.",
+    };
   }
 }
 
