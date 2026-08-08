@@ -3,6 +3,7 @@
 Revvbase is a responsive marketplace MVP for second-hand motorcycles, scooters, electric two-wheelers, and bicycles in India. Visitors can browse without signing in; one email/password account can both browse and publish listings.
 
 For the canonical human-and-agent startup procedure, see [START-HERE.md](./START-HERE.md).
+For a plain-language explanation of the hosted backend and common Supabase tasks, see [docs/SUPABASE-GUIDE.md](./docs/SUPABASE-GUIDE.md).
 
 ## Stack
 

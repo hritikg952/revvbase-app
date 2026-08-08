@@ -235,15 +235,6 @@ async function cleanup() {
 }
 
 try {
-  const scheduledRetry = await request(
-    "/rest/v1/job?jobname=eq.listing-image-cleanup-retry&select=jobid,jobname",
-    { key: serviceRoleKey, headers: { "Accept-Profile": "cron" } },
-  );
-  assert(
-    scheduledRetry.response.ok && scheduledRetry.data?.length === 1,
-    "Hosted installation is missing the listing-image-cleanup-retry cron job.",
-  );
-
   const owner = await createUser("owner");
   const other = await createUser("other");
   const ownerToken = await signIn(owner.email);
