@@ -66,6 +66,14 @@ function lateWebpDimensions(): File {
   return new File([bytes], "late-header.webp", { type: "image/webp" });
 }
 
+function webpWithVp8x(name = "image.webp"): File {
+  const bytes = new Uint8Array(30);
+  bytes.set([0x52, 0x49, 0x46, 0x46, 22, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+  bytes.set([0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0], 12);
+  bytes.set([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 20); // 1×1 VP8X canvas
+  return new File([bytes], name, { type: "image/webp" });
+}
+
 function lateSofJpeg(width: number, height: number): File {
   const appLength = 65_535;
   const bytes = new Uint8Array(2 + 2 + appLength + 19);
@@ -988,6 +996,8 @@ describe("listing image normalization", () => {
     );
     const source = imageFile("detail.png", "image/png", [
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
     ]);
 
     const result = await normalizeListingImage(source);
@@ -1005,9 +1015,7 @@ describe("listing image normalization", () => {
   it("rejects a falsely labelled encoder result", async () => {
     const badOutput = new Blob([new Uint8Array(64)], { type: "image/webp" });
     const harness = installBrowserImageHarness([badOutput]);
-    const source = imageFile("bike.webp", "image/webp", [
-      0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
-    ]);
+    const source = webpWithVp8x("bike.webp");
 
     const result = await normalizeListingImage(source);
 

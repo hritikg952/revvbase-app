@@ -366,10 +366,7 @@ export async function normalizeListingImage(
       sourceMimeType,
       images.sourceSafety.maxBytes,
     );
-    if (
-      !headerDimensions &&
-      ["image/jpeg", "image/heic", "image/heif"].includes(sourceMimeType)
-    ) {
+    if (!headerDimensions) {
       return failure(
         file,
         "decode-failed",

@@ -198,11 +198,12 @@ function createDatabase(client: ReturnType<typeof createClient>): LifecycleDatab
       return toReservation(data);
     },
 
-    async reserveUploadCleanup({ userId, listingId, storageKey }) {
+    async reserveUploadCleanup({ userId, listingId, storageKey, activate = false }) {
       const { data, error } = await client.rpc("reserve_listing_upload_cleanup", {
         p_user_id: userId,
         p_listing_id: listingId,
         p_storage_key: storageKey,
+        p_activate: activate,
       });
       if (error) throw error;
       return toReservation(data);

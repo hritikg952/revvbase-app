@@ -71,6 +71,7 @@ export interface LifecycleDatabase {
     userId: string;
     listingId: string;
     storageKey: string;
+    activate?: boolean;
   }): Promise<LifecycleCleanupReservation>;
   completeCleanupJob(jobId: string): Promise<void>;
   failCleanupJob(jobId: string, message: string): Promise<void>;
@@ -458,6 +459,7 @@ export function createListingImageLifecycle({
         userId,
         listingId: action.listingId,
         storageKey: action.storageKey,
+        activate: action.action === "compensate-upload",
       });
       if (action.action === "reserve-upload-cleanup") {
         return {

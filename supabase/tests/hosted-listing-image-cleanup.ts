@@ -235,6 +235,15 @@ async function cleanup() {
 }
 
 try {
+  const scheduledRetry = await request(
+    "/rest/v1/job?jobname=eq.listing-image-cleanup-retry&select=jobid,jobname",
+    { key: serviceRoleKey, headers: { "Accept-Profile": "cron" } },
+  );
+  assert(
+    scheduledRetry.response.ok && scheduledRetry.data?.length === 1,
+    "Hosted installation is missing the listing-image-cleanup-retry cron job.",
+  );
+
   const owner = await createUser("owner");
   const other = await createUser("other");
   const ownerToken = await signIn(owner.email);
@@ -284,6 +293,57 @@ try {
 
   await setRequiredPolicy(true);
   const requiredDraft = await createDraft(ownerToken, owner.id, "Required");
+
+  const crashedClaimKey = `${owner.id}/${requiredDraft}/${crypto.randomUUID()}.webp`;
+  const insertedCrashJob = await request("/rest/v1/listing_image_cleanup_jobs", {
+    method: "POST",
+    key: serviceRoleKey,
+    body: { seller_id: owner.id, listing_id: requiredDraft, storage_key: crashedClaimKey, state: "pending" },
+    headers: { Prefer: "return=representation" },
+  });
+  assert(insertedCrashJob.response.ok, "Could not create crash-after-claim cleanup fixture.");
+  const firstClaim = await request("/rest/v1/rpc/claim_listing_image_cleanup_jobs", {
+    method: "POST", key: serviceRoleKey, body: { p_limit: 1 },
+  });
+  const crashJobId = firstClaim.data?.[0]?.cleanup_job_id;
+  assert(typeof crashJobId === "string", "Could not claim cleanup crash fixture.");
+  const expireLease = await request(`/rest/v1/listing_image_cleanup_jobs?id=eq.${crashJobId}`, {
+    method: "PATCH", key: serviceRoleKey,
+    body: { claimed_at: "2000-01-01T00:00:00Z" },
+  });
+  assert(expireLease.response.ok, "Could not expire cleanup lease fixture.");
+  const reclaimed = await request("/rest/v1/rpc/claim_listing_image_cleanup_jobs", {
+    method: "POST", key: serviceRoleKey, body: { p_limit: 1 },
+  });
+  assert(reclaimed.data?.[0]?.cleanup_job_id === crashJobId, "Expired claimed cleanup job was not reclaimed.");
+  await request("/rest/v1/rpc/complete_listing_image_cleanup", {
+    method: "POST", key: serviceRoleKey, body: { p_job_id: crashJobId },
+  });
+
+  const registrationRaceKey = `${owner.id}/${requiredDraft}/${crypto.randomUUID()}.webp`;
+  const reserved = await invoke(ownerToken, {
+    action: "reserve-upload-cleanup", listingId: requiredDraft, storageKey: registrationRaceKey,
+  });
+  assert(reserved.response.ok, "Could not reserve upload cleanup race fixture.");
+  const raceUpload = await request(`/storage/v1/object/listing-images/${registrationRaceKey}`, {
+    method: "POST", token: ownerToken, rawBody: canonicalWebp,
+    headers: { "Content-Type": "image/webp", "x-upsert": "false" },
+  });
+  assert(raceUpload.response.ok, "Could not upload registration race fixture.");
+  createdStorageKeys.push(registrationRaceKey);
+  const raceRegistration = await request("/rest/v1/rpc/register_listing_image", {
+    method: "POST", token: ownerToken,
+    body: { p_listing_id: requiredDraft, p_storage_key: registrationRaceKey },
+  });
+  assert(raceRegistration.response.ok, "Could not register reserved upload fixture.");
+  const raceClaim = await request("/rest/v1/rpc/claim_listing_image_cleanup_jobs", {
+    method: "POST", key: serviceRoleKey, body: { p_limit: 50, p_seller_id: owner.id },
+  });
+  assert(
+    !raceClaim.data?.some((job: { cleanup_storage_key: string }) => job.cleanup_storage_key === registrationRaceKey),
+    "Worker claimed an upload while registration was in flight.",
+  );
+  await assertPublicObjectAvailable(registrationRaceKey, "Registration cancelled its cleanup reservation after the object was removed.");
   const rejectedPublish = await invoke(ownerToken, {
     action: "publish",
     listingId: requiredDraft,
