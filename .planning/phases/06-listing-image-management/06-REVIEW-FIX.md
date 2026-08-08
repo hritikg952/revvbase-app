@@ -1,63 +1,43 @@
 ---
 phase: 06-listing-image-management
-fixed_at: 2026-08-08T17:55:00Z
+fixed_at: 2026-08-08T18:05:00Z
 review_path: .planning/phases/06-listing-image-management/06-REVIEW.md
-iteration: 3
-findings_in_scope: 4
-fixed: 4
+iteration: 4
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 06: Code Review Fix Report
 
-**Fixed at:** 2026-08-08T17:55:00Z
+**Fixed at:** 2026-08-08T18:05:00Z
 **Source review:** `.planning/phases/06-listing-image-management/06-REVIEW.md`
-**Iteration:** 3
+**Iteration:** 4
 
 **Summary:**
 
-- Findings in scope: 4
-- Fixed: 4
+- Findings in scope: 1
+- Fixed: 1
 - Skipped: 0
 
 ## Fixed Issues
 
-### CR-01: A worker interruption strands claimed cleanup jobs forever
+### CR-01: A post-commit upload transport failure strands an object in a non-claimable reservation
 
-**Files modified:** `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`, `supabase/functions/listing-image-cleanup/lifecycle.test.ts`, `supabase/tests/hosted-listing-image-cleanup.ts`
-**Commits:** RED `1a607fa`; GREEN `80e6ee9`
-**Applied fix:** Processing claims now expire after five minutes. Reclaims consume the bounded attempt budget, terminal expired claims become dead, and backoff remains based on the claimed attempt. The hosted regression simulates a crash after claim and verifies the job can be reclaimed.
-
-### CR-02: The scheduled retry consumer can be omitted permanently when Vault is not pre-seeded
-
-**Files modified:** `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`, `supabase/tests/hosted-listing-image-cleanup.ts`
-**Commit:** `80e6ee9`
-**Applied fix:** The migration now fails with an explicit secure-provisioning error when either required Vault secret is missing; once present it replaces the named cron job idempotently. The hosted check asserts that `listing-image-cleanup-retry` is installed. No credentials were read, printed, persisted, or deployed.
-
-### CR-03: An eligible upload pre-intent can delete an object while registration is in flight
-
-**Files modified:** `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`, `supabase/functions/listing-image-cleanup/index.ts`, `supabase/functions/listing-image-cleanup/lifecycle.ts`, `supabase/functions/listing-image-cleanup/lifecycle.test.ts`, `supabase/tests/hosted-listing-image-cleanup.ts`
-**Commits:** RED `1a607fa`; GREEN `80e6ee9`
-**Applied fix:** Upload intents start as non-claimable `reserved` rows. Compensation explicitly activates only reserved jobs after registration failure, while the registration trigger atomically cancels the reservation. Hosted coverage confirms a worker cannot claim the registration-race object and the registered object remains available. **Fixed: requires human verification.**
-
-### WR-01: WebP with an unproven bounded header can bypass the pre-decode pixel guard
-
-**Files modified:** `src/lib/image-normalizer.client.ts`, `src/lib/listing-images.test.ts`
-**Commits:** RED `1a607fa`; GREEN `80e6ee9`
-**Applied fix:** Every accepted source type now fails closed before decoding when bounded metadata inspection cannot prove dimensions. The late WebP regression verifies `createImageBitmap` is never called.
+**Files modified:** `src/lib/listing-image-storage.test.ts`, `src/lib/storage/supabase-listing-images.ts`, `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`
+**Commits:** RED `be74686`; GREEN `8def261`
+**Applied fix:** Both thrown and error-result upload outcomes now activate the protected `compensate-upload` lifecycle action with the exact listing/key before surfacing typed `upload_failed`. Reserved intents also become eligible for the retry worker after the registration grace period, preventing a permanent non-claimable orphan if immediate activation itself is unreachable. The regression covers both transport shapes.
 
 ## Verification
 
-- Full Vitest: passed, 51 tests.
+- Full Vitest: passed, 53 tests.
 - TypeScript: passed (`tsc --noEmit`).
 - Production build: passed in the normal checkout.
-- Lifecycle Deno command: not run; `deno` is not installed in this environment.
-- Migration dry-run: attempted with `supabase migration list --local`; blocked because no local PostgreSQL project is reachable. The hosted test contains the required installation assertion but was not deployed or run.
-- Hosted deployment: not attempted.
+- Hosted deployment and Vault changes: not attempted.
 
 ---
 
-_Fixed: 2026-08-08T17:55:00Z_
+_Fixed: 2026-08-08T18:05:00Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 3_
+_Iteration: 4_
