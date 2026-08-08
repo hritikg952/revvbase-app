@@ -1,99 +1,80 @@
 ---
 phase: 06-listing-image-management
-fixed_at: 2026-08-05T10:23:23Z
+fixed_at: 2026-08-05T11:02:15Z
 review_path: .planning/phases/06-listing-image-management/06-REVIEW.md
-iteration: 1
-findings_in_scope: 9
-fixed: 7
-skipped: 2
-status: complete
+iteration: 2
+findings_in_scope: 5
+fixed: 5
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 06: Code Review Fix Report
 
-**Fixed at:** 2026-08-05T10:23:23Z
+**Fixed at:** 2026-08-05T11:02:15Z
 **Source review:** `.planning/phases/06-listing-image-management/06-REVIEW.md`
-**Iteration:** 1
+**Iteration:** 2
 
 **Summary:**
 
-- Findings in scope: 9
-- Fixed: 7
-- Skipped: 2
-- Hosted deployment: migration and Edge Function deployed; full hosted harness passed
+- Findings in scope: 5
+- Fixed: 5
+- Skipped: 0
+- Final forward-migration commit: blocked by approval-system usage exhaustion; verified files remain in the isolated worktree
 
 ## Fixed Issues
 
-### CR-03: Registration failures leave storage objects that users cannot delete
+### CR-01: Pending cleanup jobs have no retry consumer
 
-**Files modified:** `src/lib/listing-image-storage.test.ts`, `src/lib/storage/supabase-listing-images.ts`, `src/lib/storage/browser-listing-image-storage.ts`, `supabase/functions/listing-image-cleanup/lifecycle.ts`, `supabase/functions/listing-image-cleanup/index.ts`, `supabase/migrations/20260805000000_durable_listing_image_cleanup.sql`
-**Commits:** RED `4992e44`; GREEN `56a030b` plus durable server cleanup in `ca3debb`
-**Applied fix:** Registration failure invokes protected compensation for the exact uploaded key. Compensation first creates a durable cleanup job, so provider failure is recorded for retry instead of silently abandoning the object.
+**Files modified:** `supabase/functions/listing-image-cleanup/lifecycle.ts`, `supabase/functions/listing-image-cleanup/lifecycle.test.ts`, `supabase/functions/listing-image-cleanup-retry/index.ts`, `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`, `src/lib/listing-image-lifecycle-client.ts`, `src/lib/listing-image-manager.ts`, `src/lib/listing-image-consumers.ts`
+**Commits:** RED `48efe48`; GREEN `0b5d10a`; immediate-failure transition `dc69a74`; final forward-migration correction pending commit
+**Applied fix:** Added an idempotent retry consumer, atomic `FOR UPDATE SKIP LOCKED` claims, five-attempt ceiling, exponential backoff, terminal dead state, immediate and scheduled trigger paths, and client-visible `cleanupPending`. Transient-failure coverage proves a pending job can later complete. **Fixed: requires human verification.**
 
-### CR-04: Object-first deletion can leave live records permanently pointing at missing files
+### CR-02: Failed registration compensation is still best-effort
 
-**Files modified:** `supabase/functions/listing-image-cleanup/lifecycle.ts`, `supabase/functions/listing-image-cleanup/lifecycle.test.ts`, `supabase/functions/listing-image-cleanup/index.ts`, `supabase/migrations/20260805000000_durable_listing_image_cleanup.sql`
-**Commits:** RED `3c30dbd`; GREEN `ca3debb`
-**Applied fix:** Added a transactional PostgreSQL reservation boundary and durable cleanup outbox. Listing visibility and image metadata change atomically before idempotent storage cleanup; failed object deletion remains pending with attempt/error state. **Fixed: requires human verification.**
+**Files modified:** `src/lib/listing-image-storage.test.ts`, `src/lib/storage/supabase-listing-images.ts`, `src/lib/storage/browser-listing-image-storage.ts`, `src/lib/storage/listing-image-storage.ts`, `src/lib/listing-image-lifecycle-client.ts`, `supabase/functions/listing-image-cleanup/lifecycle.ts`, `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`
+**Commits:** RED `8c1abfe`; GREEN `5bcd703`; final forward-migration correction pending commit
+**Applied fix:** Durable cleanup intent is created before upload. Registration atomically cancels the intent through a database trigger; failed or unreachable compensation leaves the pre-existing job retryable. Reservation failure stops before object upload and returns an honest typed error.
 
-### CR-05: Concurrent image deletions violate the required-photo publication invariant
-
-**Files modified:** `supabase/functions/listing-image-cleanup/lifecycle.ts`, `supabase/functions/listing-image-cleanup/lifecycle.test.ts`, `supabase/functions/listing-image-cleanup/index.ts`, `supabase/migrations/20260805000000_durable_listing_image_cleanup.sql`, `supabase/tests/hosted-listing-image-cleanup.ts`
-**Commits:** RED `d3d7471`; GREEN `ca3debb`, hosted concurrency coverage `addf6f6`
-**Applied fix:** Transactional deletion and publication functions lock the listing row with `FOR UPDATE` before counting images or changing status. Concurrent final-photo deletions serialize and preserve the required-image draft invariant. **Fixed: requires human verification.**
-
-### CR-06: A transient publication failure strands a saved draft and retry creates duplicates
-
-**Files modified:** `src/lib/listing-images.test.ts`, `src/lib/listing-form-workflow.ts`
-**Commits:** RED `c16dade`; GREEN `18b03c7`
-**Applied fix:** Once draft persistence returns an ID, every publication failure routes to that draft's edit page with retry guidance instead of returning to the create/insert path. **Fixed: requires human verification.**
-
-### WR-01: Upload controls permit overlapping selections against stale capacity
+### WR-01: Concurrent photo responses can overwrite final draft status
 
 **Files modified:** `src/lib/listing-images.test.ts`, `src/lib/listing-image-manager.ts`, `src/components/listing-image-manager.tsx`
-**Commits:** RED `e01b3c6`; GREEN `d143979`
-**Applied fix:** Upload batches now have globally unique operation IDs, controls are disabled while a batch is pending, pending state is restored in `finally`, and authoritative metadata is reloaded after the batch.
+**Commits:** RED `2e375db`; GREEN `f88a018`
+**Applied fix:** Photo-deletion status reconciliation is monotonic: an authoritative draft result cannot be overwritten by a later-arriving stale active result, including the parent status callback. **Fixed: requires human verification.**
 
-### WR-02: Unexpected normalization errors become unhandled promises and leave the UI stuck
+### WR-02: Retained-draft publication failure notice is never shown
 
-**Files modified:** `src/lib/listing-images.test.ts`, `src/lib/listing-image-manager.ts`
-**Commits:** RED `88693c8`; GREEN `c5549e1`
-**Applied fix:** Normalizer rejections are caught per file, converted to file-specific error states, and do not prevent later files in the batch from completing.
+**Files modified:** `src/lib/listing-images.test.ts`, `src/lib/listing-form-workflow.ts`, `src/app/listings/[id]/edit/page.tsx`
+**Commits:** RED `dda1d3a`; GREEN `d4d6c09`
+**Applied fix:** Generic publication failure routes with bounded reason `created=publish-failed`; the edit page maps that reason to local retry guidance and renders it with an accessible alert role.
 
-### WR-03: Pixel safety limit is checked only after the browser has decoded the image
+### WR-03: JPEG and HEIC can bypass the pre-decode pixel guard
 
 **Files modified:** `src/lib/listing-images.test.ts`, `src/lib/image-normalizer.client.ts`
-**Commits:** RED `989aca0`; GREEN `1ed9ae1`
-**Applied fix:** Added bounded pre-decode dimension parsing for PNG, JPEG, and WebP with an overflow-safe pixel check, while retaining the post-decode guard. HEIC/HEIF deliberately retains only the post-decode check because this implementation does not prove its nested ISO-BMFF metadata graph safe.
-
-## Skipped Issues
-
-### CR-01: Cut-over migration irreversibly drops existing image references
-
-**File:** `supabase/migrations/20260801010000_cut_over_listing_image_contract.sql:1`
-**Reason:** Not applicable to this approved one-way cutover. The user-authorized hosted inspection found zero non-null `listings.image_url` values before the migration, so there was no legacy data to backfill or retain. Recreating the retired schema would contradict the approved cutover.
-**Original issue:** Dropping the legacy column could lose existing non-null image references.
-
-### CR-02: Public bucket bypasses draft-image authorization
-
-**File:** `supabase/migrations/20260801000000_add_listing_images_storage.sql:183`
-**Reason:** Deferred accepted risk under locked Phase 06 decision D-02 in `06-CONTEXT.md`. The acceptance contract intentionally permits stable public draft object delivery while draft listing records and metadata remain private; signed URLs/private staging are deferred.
-**Original issue:** Anyone with a leaked public draft object URL can retrieve the object.
+**Commits:** RED `1d8b02e`; GREEN `8a5860f`
+**Applied fix:** JPEG inspection traverses the full configured source-byte budget, including late SOF markers. HEIC/HEIF inspection performs bounded, depth-limited ISO-BMFF traversal through `meta`/`iprp`/`ipco` and reads `ispe` dimensions. Unproven dimensions fail closed before `createImageBitmap` or `heic-to`; the post-decode ceiling remains defense-in-depth.
 
 ## Verification
 
-- Full Vitest: 44/44 passed.
-- Lifecycle tests: 15/15 passed, including durable failure state and concurrent deletion.
+- Full Vitest: 50/50 passed.
+- Lifecycle tests: 16/16 passed.
 - TypeScript: passed (`tsc --noEmit`).
-- Production build: passed after replacing the isolated worktree's external dependency symlink with a local APFS clone.
-- Migration dry-run and deployment: passed; exactly `20260805000000_durable_listing_image_cleanup.sql` was applied.
-- Migration parity: all five local and remote migrations match.
-- Hosted Edge Function deployment: passed for `listing-image-cleanup` on project `qokumaemcqwkqhrxyolc`.
-- Hosted two-mode/security/cleanup harness: passed, including the concurrent final-image deletion assertion.
-- `images.required=false`: restored by the hosted harness cleanup block.
+- Production build: passed.
+- Migration dry-run: passed; exactly `20260805010000_consume_listing_image_cleanup_jobs.sql` is pending.
+- Hosted deployment: not attempted, per iteration-2 instruction.
+- Existing hosted `20260805000000` migration was detected as already applied and is restored byte-for-byte in the worktree.
+
+## Operational Handoff
+
+The isolated branch is `gsd-reviewfix/06-39912` at `dc69a74`, with worktree `/tmp/sv-06-reviewfix-ZLXpKI`. Approval-system usage exhaustion blocked the final commit. Before merging, commit these two worktree files together:
+
+- `supabase/migrations/20260805000000_durable_listing_image_cleanup.sql`
+- `supabase/migrations/20260805010000_consume_listing_image_cleanup_jobs.sql`
+
+Do not merge `dc69a74` alone because it still contains edits to the already-applied migration; the uncommitted pair restores history and moves iteration-2 changes into the forward migration.
 
 ---
 
-_Fixed: 2026-08-05T10:23:23Z_
+_Fixed: 2026-08-05T11:02:15Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
