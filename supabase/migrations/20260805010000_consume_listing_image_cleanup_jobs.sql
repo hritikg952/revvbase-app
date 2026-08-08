@@ -42,7 +42,7 @@ begin
   where storage_key = new.storage_key
   for update;
 
-  if cleanup_state = 'processing' then
+  if cleanup_state in ('processing', 'completed') then
     raise serialization_failure using message = 'Cleanup is in progress; retry registration.';
   end if;
   return new;
