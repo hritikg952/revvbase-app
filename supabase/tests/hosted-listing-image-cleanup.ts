@@ -368,6 +368,26 @@ try {
   assert(!fencedRegistration.response.ok, "Registration succeeded after cleanup was claimed.");
   const fencedMetadata = await request(`/rest/v1/listing_images?storage_key=eq.${claimedRaceKey}&select=id`, { key: serviceRoleKey });
   assert(fencedMetadata.data?.length === 0, "Claimed cleanup race created metadata for a deletable object.");
+
+  const completedRaceKey = `${owner.id}/${requiredDraft}/${crypto.randomUUID()}.webp`;
+  const completedUpload = await request(`/storage/v1/object/listing-images/${completedRaceKey}`, {
+    method: "POST", token: ownerToken, rawBody: canonicalWebp,
+    headers: { "Content-Type": "image/webp", "x-upsert": "false" },
+  });
+  assert(completedUpload.response.ok, "Could not upload completed-cleanup race fixture.");
+  createdStorageKeys.push(completedRaceKey);
+  const completedIntent = await request("/rest/v1/listing_image_cleanup_jobs", {
+    method: "POST", key: serviceRoleKey,
+    body: { seller_id: owner.id, listing_id: requiredDraft, storage_key: completedRaceKey, state: "completed" },
+  });
+  assert(completedIntent.response.ok, "Could not create completed cleanup fixture.");
+  const completedRegistration = await request("/rest/v1/rpc/register_listing_image", {
+    method: "POST", token: ownerToken,
+    body: { p_listing_id: requiredDraft, p_storage_key: completedRaceKey },
+  });
+  assert(!completedRegistration.response.ok, "Registration succeeded after cleanup completed.");
+  const completedMetadata = await request(`/rest/v1/listing_images?storage_key=eq.${completedRaceKey}&select=id`, { key: serviceRoleKey });
+  assert(completedMetadata.data?.length === 0, "Completed cleanup created metadata for a potentially deleted object.");
   const rejectedPublish = await invoke(ownerToken, {
     action: "publish",
     listingId: requiredDraft,
