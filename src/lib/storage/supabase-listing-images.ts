@@ -81,6 +81,19 @@ export function createSupabaseListingImageStorage({
 }: CreateSupabaseListingImageStorageOptions): ListingImageStorage {
   const bucket = client.storage.from(LISTING_IMAGES_BUCKET);
 
+  async function compensateFailedUpload(listingId: string, storageKey: string) {
+    if (!compensateUpload) return;
+    try {
+      await compensateUpload({
+        action: "compensate-upload",
+        listingId,
+        storageKey,
+      });
+    } catch {
+      // The worker reclaims reserved intents after the registration grace period.
+    }
+  }
+
   return {
     async upload({
       sellerId,
@@ -100,12 +113,22 @@ export function createSupabaseListingImageStorage({
           "The photo upload could not start because durable cleanup could not be reserved. Try again.",
         );
       }
-      const uploadResult = await bucket.upload(storageKey, file, {
-        cacheControl: "31536000",
-        contentType: "image/webp",
-        upsert: false,
-      });
+      let uploadResult: ProviderResult<unknown>;
+      try {
+        uploadResult = await bucket.upload(storageKey, file, {
+          cacheControl: "31536000",
+          contentType: "image/webp",
+          upsert: false,
+        });
+      } catch {
+        await compensateFailedUpload(listingId, storageKey);
+        throw new ListingImageStorageError(
+          "upload_failed",
+          "The photo could not be uploaded. Please try again.",
+        );
+      }
       if (uploadResult.error) {
+        await compensateFailedUpload(listingId, storageKey);
         throw new ListingImageStorageError(
           "upload_failed",
           "The photo could not be uploaded. Please try again.",
@@ -128,17 +151,7 @@ export function createSupabaseListingImageStorage({
         ? registration.data[0]
         : registration.data;
       if (registration.error || !registeredRow) {
-        if (compensateUpload) {
-          try {
-            await compensateUpload({
-              action: "compensate-upload",
-              listingId,
-              storageKey,
-            });
-          } catch {
-            // The pre-upload reservation remains durable for the retry consumer.
-          }
-        }
+        await compensateFailedUpload(listingId, storageKey);
         throw new ListingImageStorageError(
           "registration_failed",
           "The uploaded photo could not be attached to this listing; cleanup is queued.",

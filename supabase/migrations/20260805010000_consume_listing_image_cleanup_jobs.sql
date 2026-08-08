@@ -94,6 +94,7 @@ begin
       and (
         (jobs.state = 'pending' and jobs.next_attempt_at <= timezone('utc', now()))
         or (jobs.state = 'processing' and jobs.claimed_at <= timezone('utc', now()) - interval '5 minutes')
+        or (jobs.state = 'reserved' and jobs.created_at <= timezone('utc', now()) - interval '5 minutes')
       )
       and (p_seller_id is null or jobs.seller_id = p_seller_id)
     order by jobs.next_attempt_at, jobs.created_at
