@@ -6,6 +6,7 @@ import type {
 import { ListingImageStorageError } from "./listing-image-storage";
 import type { ListingImageRow } from "../database.types";
 import type { CompensateListingImageUploadAction } from "../listing-image-lifecycle-client";
+import type { ReserveListingImageUploadCleanupAction } from "../listing-image-lifecycle-client";
 
 const LISTING_IMAGES_BUCKET = "listing-images";
 
@@ -53,6 +54,9 @@ interface CreateSupabaseListingImageStorageOptions {
   compensateUpload?: (
     action: CompensateListingImageUploadAction,
   ) => Promise<unknown>;
+  reserveUploadCleanup: (
+    action: ReserveListingImageUploadCleanupAction,
+  ) => Promise<unknown>;
 }
 
 function toListingImage(
@@ -73,6 +77,7 @@ export function createSupabaseListingImageStorage({
   client,
   createObjectId = () => crypto.randomUUID(),
   compensateUpload,
+  reserveUploadCleanup,
 }: CreateSupabaseListingImageStorageOptions): ListingImageStorage {
   const bucket = client.storage.from(LISTING_IMAGES_BUCKET);
 
@@ -83,6 +88,18 @@ export function createSupabaseListingImageStorage({
       file,
     }: UploadListingImageInput): Promise<ListingImage> {
       const storageKey = `${sellerId}/${listingId}/${createObjectId()}.webp`;
+      try {
+        await reserveUploadCleanup({
+          action: "reserve-upload-cleanup",
+          listingId,
+          storageKey,
+        });
+      } catch {
+        throw new ListingImageStorageError(
+          "cleanup_reservation_failed",
+          "The photo upload could not start because durable cleanup could not be reserved. Try again.",
+        );
+      }
       const uploadResult = await bucket.upload(storageKey, file, {
         cacheControl: "31536000",
         contentType: "image/webp",
@@ -95,24 +112,36 @@ export function createSupabaseListingImageStorage({
         );
       }
 
-      const registration = await client.rpc("register_listing_image", {
-        p_listing_id: listingId,
-        p_storage_key: storageKey,
-      });
+      let registration: ProviderResult<ListingImageRow | ListingImageRow[] | null>;
+      try {
+        registration = await client.rpc("register_listing_image", {
+          p_listing_id: listingId,
+          p_storage_key: storageKey,
+        });
+      } catch {
+        registration = {
+          data: null,
+          error: { message: "Registration request failed." },
+        };
+      }
       const registeredRow = Array.isArray(registration.data)
         ? registration.data[0]
         : registration.data;
       if (registration.error || !registeredRow) {
         if (compensateUpload) {
-          await compensateUpload({
-            action: "compensate-upload",
-            listingId,
-            storageKey,
-          });
+          try {
+            await compensateUpload({
+              action: "compensate-upload",
+              listingId,
+              storageKey,
+            });
+          } catch {
+            // The pre-upload reservation remains durable for the retry consumer.
+          }
         }
         throw new ListingImageStorageError(
           "registration_failed",
-          "The uploaded photo could not be attached to this listing.",
+          "The uploaded photo could not be attached to this listing; cleanup is queued.",
         );
       }
 

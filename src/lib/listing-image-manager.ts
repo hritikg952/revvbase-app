@@ -193,6 +193,19 @@ export type RemoveListingPhotoResult =
       message: string;
     };
 
+export function reconcilePhotoDeletionStatus(
+  currentStatus: ListingLifecycleStatus,
+  incomingStatus: ListingLifecycleStatus,
+): ListingLifecycleStatus {
+  if (currentStatus === "deleted" || incomingStatus === "deleted") {
+    return "deleted";
+  }
+  if (currentStatus === "draft" || incomingStatus === "draft") {
+    return "draft";
+  }
+  return "active";
+}
+
 export async function removeListingPhoto({
   image,
   images,
@@ -211,7 +224,9 @@ export async function removeListingPhoto({
       ok: true,
       images: images.filter((candidate) => candidate.id !== image.id),
       status: result.status,
-      message: result.status === "draft"
+      message: result.cleanupPending
+        ? "Photo removed. Permanent file cleanup is queued and will retry automatically."
+        : result.status === "draft"
         ? "Photo removed. Your listing is now a draft until you add a photo and publish it again."
         : "Photo removed.",
     };

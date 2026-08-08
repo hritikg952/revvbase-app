@@ -7,8 +7,10 @@ import { AuthRequired } from "@/components/auth-required";
 import { useAuth } from "@/components/auth-provider";
 import { ListingForm } from "@/components/listing-form";
 import type { Listing } from "@/lib/database.types";
-import { getListingEditPageCopy } from "@/lib/listing-form-workflow";
-import { getImageLifecycleCopy } from "@/lib/listing-images";
+import {
+  getCreatedDraftNotice,
+  getListingEditPageCopy,
+} from "@/lib/listing-form-workflow";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function EditListingPage() {
@@ -18,6 +20,7 @@ export default function EditListingPage() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const createdDraftNotice = getCreatedDraftNotice(searchParams.get("created"));
 
   useEffect(() => {
     if (!user || !id) return;
@@ -60,11 +63,12 @@ export default function EditListingPage() {
                 <p>{getListingEditPageCopy(listing.status).visibilityNotice}</p>
               )}
             </div>
-            {listing.status === "draft" && searchParams.get("created") === "draft" && (
-              <div className="form-alert success" role="status">
-                {getImageLifecycleCopy().minimumToPublish === 1
-                  ? getImageLifecycleCopy().draftNotice
-                  : "Your listing was saved as a draft."}
+            {listing.status === "draft" && createdDraftNotice && (
+              <div
+                className={`form-alert ${createdDraftNotice.kind}`}
+                role={createdDraftNotice.kind === "error" ? "alert" : "status"}
+              >
+                {createdDraftNotice.message}
               </div>
             )}
             <ListingForm

@@ -23,17 +23,25 @@ export interface CompensateListingImageUploadAction {
   storageKey: string;
 }
 
+export interface ReserveListingImageUploadCleanupAction {
+  action: "reserve-upload-cleanup";
+  listingId: string;
+  storageKey: string;
+}
+
 export type ListingImageLifecycleAction =
   | PublishListingAction
   | DeleteListingImageAction
   | DeleteListingAction
-  | CompensateListingImageUploadAction;
+  | CompensateListingImageUploadAction
+  | ReserveListingImageUploadCleanupAction;
 export type ListingLifecycleStatus = "draft" | "active" | "deleted";
 
 export interface ListingImageLifecycleResult {
   action: ListingImageLifecycleAction["action"];
   listingId: string;
   status: ListingLifecycleStatus;
+  cleanupPending?: boolean;
 }
 
 interface LifecycleErrorPayload {

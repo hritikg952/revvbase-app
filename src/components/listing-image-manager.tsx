@@ -6,6 +6,7 @@ import {
   getOrderedPhotoTiles,
   processListingPhotoSelection,
   publishPersistedListing,
+  reconcilePhotoDeletionStatus,
   removeListingPhoto,
   type PhotoFileState,
 } from "@/lib/listing-image-manager";
@@ -50,6 +51,7 @@ export function ListingImageManager({
 }: ListingImageManagerProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const statusRef = useRef<ListingLifecycleStatus>(initialStatus);
   const [images, setImages] = useState<ListingImage[]>([]);
   const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(true);
@@ -155,8 +157,13 @@ export function ListingImageManager({
       currentStatus: status,
       execute: executeLifecycle,
     });
-    setStatus(result.status);
-    onStatusChange?.(result.status);
+    const reconciledStatus = reconcilePhotoDeletionStatus(
+      statusRef.current,
+      result.status,
+    );
+    statusRef.current = reconciledStatus;
+    setStatus(reconciledStatus);
+    onStatusChange?.(reconciledStatus);
     if (result.ok) {
       setImages((current) => current.filter((row) => row.id !== image.id));
     }
@@ -181,6 +188,7 @@ export function ListingImageManager({
       currentStatus: status,
       execute: executeLifecycle,
     });
+    statusRef.current = result.status;
     setStatus(result.status);
     onStatusChange?.(result.status);
     setStatusFeedback({

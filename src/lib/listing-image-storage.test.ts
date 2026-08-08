@@ -4,6 +4,75 @@ import { emptyListingForm, toListingPayload } from "./listings";
 import { createSupabaseListingImageStorage } from "./storage/supabase-listing-images";
 
 describe("listing image storage contract", () => {
+  it("durably reserves cleanup before upload and reports queued cleanup when compensation is unreachable", async () => {
+    const events: string[] = [];
+    const reserveUploadCleanup = vi.fn().mockImplementation(async () => {
+      events.push("reserve");
+    });
+    const compensateUpload = vi.fn().mockImplementation(async () => {
+      events.push("compensate");
+      throw new Error("edge unavailable");
+    });
+    const client = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          upload: vi.fn().mockImplementation(async () => {
+            events.push("upload");
+            return { data: { path: "ignored" }, error: null };
+          }),
+          getPublicUrl: vi.fn(),
+        }),
+      },
+      rpc: vi.fn().mockImplementation(async () => {
+        events.push("register");
+        throw new Error("registration connection lost");
+      }),
+    };
+    const storage = createSupabaseListingImageStorage({
+      client,
+      createObjectId: () => "image-1",
+      reserveUploadCleanup,
+      compensateUpload,
+    });
+
+    await expect(
+      storage.upload({
+        sellerId: "owner-1",
+        listingId: "listing-1",
+        file: new File(["webp"], "vehicle.webp", { type: "image/webp" }),
+      }),
+    ).rejects.toMatchObject({
+      code: "registration_failed",
+      message: expect.stringContaining("cleanup is queued"),
+    });
+    expect(events).toEqual(["reserve", "upload", "register", "compensate"]);
+  });
+
+  it("does not upload when durable cleanup reservation cannot be established", async () => {
+    const upload = vi.fn();
+    const rpc = vi.fn();
+    const storage = createSupabaseListingImageStorage({
+      client: {
+        storage: {
+          from: vi.fn().mockReturnValue({ upload, getPublicUrl: vi.fn() }),
+        },
+        rpc,
+      },
+      createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+
+    await expect(
+      storage.upload({
+        sellerId: "owner-1",
+        listingId: "listing-1",
+        file: new File(["webp"], "vehicle.webp", { type: "image/webp" }),
+      }),
+    ).rejects.toMatchObject({ code: "cleanup_reservation_failed" });
+    expect(upload).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("requests protected compensation for the exact object when registration fails", async () => {
     const upload = vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null });
     const compensateUpload = vi.fn().mockResolvedValue(undefined);
@@ -22,6 +91,7 @@ describe("listing image storage contract", () => {
     const storage = createSupabaseListingImageStorage({
       client,
       createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
       compensateUpload,
     });
 
@@ -68,6 +138,7 @@ describe("listing image storage contract", () => {
     const storage = createSupabaseListingImageStorage({
       client,
       createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
     });
     const canonicalFile = new File(["webp"], "vehicle.webp", {
       type: "image/webp",
@@ -140,7 +211,10 @@ describe("listing image storage contract", () => {
       from,
       rpc: vi.fn(),
     };
-    const storage = createSupabaseListingImageStorage({ client });
+    const storage = createSupabaseListingImageStorage({
+      client,
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
+    });
 
     await expect(storage.list("listing-1")).resolves.toEqual([
       expect.objectContaining({

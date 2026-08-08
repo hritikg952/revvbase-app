@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 import {
   LifecycleError,
+  createCleanupRetryConsumer,
   createListingImageLifecycle,
   parseListingImageLifecycleAction,
   type LifecycleDatabase,
@@ -528,4 +529,46 @@ test("does not let compensation delete an object with registered metadata", asyn
     },
   );
   assert.ok(!fixture.events.some((event) => event.startsWith("remove-objects:")));
+});
+
+test("retries a durable cleanup job and completes it after a transient storage failure", async () => {
+  const events: string[] = [];
+  const job = { id: "job-1", storageKey: IMAGE_ONE.storageKey };
+  let attempt = 0;
+  let completed = false;
+  const consumer = createCleanupRetryConsumer({
+    database: {
+      async claimCleanupJobs() {
+        events.push("claim");
+        return completed ? [] : [job];
+      },
+      async completeCleanupJob(jobId: string) {
+        events.push(`complete:${jobId}`);
+        completed = true;
+      },
+      async failCleanupJob(jobId: string) {
+        events.push(`fail:${jobId}`);
+      },
+    },
+    storage: {
+      async remove(storageKeys: string[]) {
+        attempt += 1;
+        events.push(`remove:${storageKeys.join(",")}`);
+        if (attempt === 1) throw new Error("temporary provider failure");
+      },
+    },
+  });
+
+  await assert.doesNotReject(consumer.run({ limit: 10 }));
+  assert.equal(completed, false);
+  await assert.doesNotReject(consumer.run({ limit: 10 }));
+  assert.equal(completed, true);
+  assert.deepEqual(events, [
+    "claim",
+    `remove:${IMAGE_ONE.storageKey}`,
+    "fail:job-1",
+    "claim",
+    `remove:${IMAGE_ONE.storageKey}`,
+    "complete:job-1",
+  ]);
 });
