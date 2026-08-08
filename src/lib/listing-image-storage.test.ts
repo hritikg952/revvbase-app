@@ -141,6 +141,35 @@ describe("listing image storage contract", () => {
     });
   });
 
+  it("surfaces a claimed-cleanup registration fence as a typed retryable error", async () => {
+    const storage = createSupabaseListingImageStorage({
+      client: {
+        storage: {
+          from: vi.fn().mockReturnValue({
+            upload: vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null }),
+            getPublicUrl: vi.fn(),
+          }),
+        },
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { message: "Cleanup is in progress; retry registration." },
+        }),
+      },
+      createObjectId: () => "image-1",
+      reserveUploadCleanup: vi.fn().mockResolvedValue(undefined),
+      compensateUpload: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(storage.upload({
+      sellerId: "owner-1",
+      listingId: "listing-1",
+      file: new File(["webp"], "vehicle.webp", { type: "image/webp" }),
+    })).rejects.toMatchObject({
+      code: "registration_retryable",
+      retryable: true,
+    });
+  });
+
   it("uploads one canonical image and returns registered ordered metadata", async () => {
     const upload = vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null });
     const getPublicUrl = vi.fn().mockReturnValue({
