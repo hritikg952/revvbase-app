@@ -73,6 +73,36 @@ describe("listing image storage contract", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["throws", vi.fn().mockRejectedValue(new Error("transport unavailable"))],
+    ["returns an error", vi.fn().mockResolvedValue({ data: null, error: { message: "transport unavailable" } })],
+  ])("activates cleanup for the exact reservation when upload %s", async (_case, upload) => {
+    const compensateUpload = vi.fn().mockResolvedValue(undefined);
+    const reserveUploadCleanup = vi.fn().mockResolvedValue(undefined);
+    const storage = createSupabaseListingImageStorage({
+      client: {
+        storage: { from: vi.fn().mockReturnValue({ upload, getPublicUrl: vi.fn() }) },
+        rpc: vi.fn(),
+      },
+      createObjectId: () => "image-1",
+      reserveUploadCleanup,
+      compensateUpload,
+    });
+
+    await expect(storage.upload({
+      sellerId: "owner-1",
+      listingId: "listing-1",
+      file: new File(["webp"], "vehicle.webp", { type: "image/webp" }),
+    })).rejects.toMatchObject({ code: "upload_failed" });
+
+    expect(reserveUploadCleanup).toHaveBeenCalledBefore(upload);
+    expect(compensateUpload).toHaveBeenCalledWith({
+      action: "compensate-upload",
+      listingId: "listing-1",
+      storageKey: "owner-1/listing-1/image-1.webp",
+    });
+  });
+
   it("requests protected compensation for the exact object when registration fails", async () => {
     const upload = vi.fn().mockResolvedValue({ data: { path: "ignored" }, error: null });
     const compensateUpload = vi.fn().mockResolvedValue(undefined);
