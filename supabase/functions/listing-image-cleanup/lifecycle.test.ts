@@ -572,3 +572,24 @@ test("retries a durable cleanup job and completes it after a transient storage f
     "complete:job-1",
   ]);
 });
+
+test("does not remove a reserved upload until a failed registration activates cleanup", async () => {
+  const fixture = createFixture({ imagesRequired: false });
+  const storageKey = `${OWNER_ID}/${LISTING_ID}/64000000-0000-4000-8000-000000000099.webp`;
+
+  const reserved = await fixture.lifecycle.execute(OWNER_ID, {
+    action: "reserve-upload-cleanup",
+    listingId: LISTING_ID,
+    storageKey,
+  });
+
+  assert.equal(reserved.cleanupPending, true);
+  assert.ok(!fixture.events.some((event) => event.startsWith("remove-objects:")));
+
+  await fixture.lifecycle.execute(OWNER_ID, {
+    action: "compensate-upload",
+    listingId: LISTING_ID,
+    storageKey,
+  });
+  assert.ok(fixture.events.some((event) => event === `remove-objects:${storageKey}`));
+});

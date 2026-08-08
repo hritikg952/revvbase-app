@@ -57,6 +57,15 @@ function webpBlob(size: number, type = "image/webp"): Blob {
   return new Blob([bytes], { type });
 }
 
+function lateWebpDimensions(): File {
+  const bytes = new Uint8Array(128);
+  bytes.set([0x52, 0x49, 0x46, 0x46], 0); // RIFF
+  bytes.set([0x57, 0x45, 0x42, 0x50], 8); // WEBP
+  bytes.set([0x4a, 0x55, 0x4e, 0x4b, 100, 0, 0, 0], 12); // JUNK chunk
+  bytes.set([0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0], 120 - 8); // VP8X too late for this bounded file fixture
+  return new File([bytes], "late-header.webp", { type: "image/webp" });
+}
+
 function lateSofJpeg(width: number, height: number): File {
   const appLength = 65_535;
   const bytes = new Uint8Array(2 + 2 + appLength + 19);
@@ -958,6 +967,19 @@ describe("listing image normalization", () => {
       fileName: "unknown.heic",
     });
     expect(heicToMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects WebP whose bounded metadata cannot prove dimensions before decoding", async () => {
+    const harness = installBrowserImageHarness([]);
+
+    const result = await normalizeListingImage(lateWebpDimensions());
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "decode-failed",
+      fileName: "late-header.webp",
+    });
+    expect(harness.createImageBitmap).not.toHaveBeenCalled();
   });
 
   it("returns a bounded cannot-fit error when every quality exceeds 1 MB", async () => {
