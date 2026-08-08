@@ -28,6 +28,34 @@ create trigger listing_images_cancel_cleanup_intent
 after insert on public.listing_images
 for each row execute function public.cancel_listing_image_cleanup_on_registration();
 
+create or replace function public.fence_listing_image_cleanup_on_registration()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  cleanup_state text;
+begin
+  select state into cleanup_state
+  from public.listing_image_cleanup_jobs
+  where storage_key = new.storage_key
+  for update;
+
+  if cleanup_state = 'processing' then
+    raise serialization_failure using message = 'Cleanup is in progress; retry registration.';
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fence_listing_image_cleanup_on_registration()
+  from public, anon, authenticated;
+
+create trigger listing_images_fence_cleanup_claim
+before insert on public.listing_images
+for each row execute function public.fence_listing_image_cleanup_on_registration();
+
 create or replace function public.complete_listing_image_cleanup(p_job_id uuid)
 returns void
 language sql

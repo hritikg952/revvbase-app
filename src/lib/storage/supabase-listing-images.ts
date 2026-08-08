@@ -152,6 +152,13 @@ export function createSupabaseListingImageStorage({
         : registration.data;
       if (registration.error || !registeredRow) {
         await compensateFailedUpload(listingId, storageKey);
+        if (registration.error?.message?.includes("Cleanup is in progress; retry registration.")) {
+          throw new ListingImageStorageError(
+            "registration_retryable",
+            "Photo cleanup is in progress. Please retry the upload.",
+            true,
+          );
+        }
         throw new ListingImageStorageError(
           "registration_failed",
           "The uploaded photo could not be attached to this listing; cleanup is queued.",

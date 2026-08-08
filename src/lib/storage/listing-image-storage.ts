@@ -22,12 +22,14 @@ export type ListingImageStorageErrorCode =
   | "upload_failed"
   | "cleanup_reservation_failed"
   | "registration_failed"
+  | "registration_retryable"
   | "list_failed";
 
 export class ListingImageStorageError extends Error {
   constructor(
     public readonly code: ListingImageStorageErrorCode,
     message: string,
+    public readonly retryable = false,
   ) {
     super(message);
     this.name = "ListingImageStorageError";

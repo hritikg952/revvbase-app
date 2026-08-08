@@ -344,6 +344,30 @@ try {
     "Worker claimed an upload while registration was in flight.",
   );
   await assertPublicObjectAvailable(registrationRaceKey, "Registration cancelled its cleanup reservation after the object was removed.");
+
+  const claimedRaceKey = `${owner.id}/${requiredDraft}/${crypto.randomUUID()}.webp`;
+  const claimedUpload = await request(`/storage/v1/object/listing-images/${claimedRaceKey}`, {
+    method: "POST", token: ownerToken, rawBody: canonicalWebp,
+    headers: { "Content-Type": "image/webp", "x-upsert": "false" },
+  });
+  assert(claimedUpload.response.ok, "Could not upload claimed-registration race fixture.");
+  createdStorageKeys.push(claimedRaceKey);
+  const claimedIntent = await request("/rest/v1/listing_image_cleanup_jobs", {
+    method: "POST", key: serviceRoleKey,
+    body: { seller_id: owner.id, listing_id: requiredDraft, storage_key: claimedRaceKey, state: "reserved", created_at: "2000-01-01T00:00:00Z" },
+  });
+  assert(claimedIntent.response.ok, "Could not create expired reservation fixture.");
+  const claimedJob = await request("/rest/v1/rpc/claim_listing_image_cleanup_jobs", {
+    method: "POST", key: serviceRoleKey, body: { p_limit: 50, p_seller_id: owner.id },
+  });
+  assert(claimedJob.data?.some((job: { cleanup_storage_key: string }) => job.cleanup_storage_key === claimedRaceKey), "Worker did not claim expired reservation fixture.");
+  const fencedRegistration = await request("/rest/v1/rpc/register_listing_image", {
+    method: "POST", token: ownerToken,
+    body: { p_listing_id: requiredDraft, p_storage_key: claimedRaceKey },
+  });
+  assert(!fencedRegistration.response.ok, "Registration succeeded after cleanup was claimed.");
+  const fencedMetadata = await request(`/rest/v1/listing_images?storage_key=eq.${claimedRaceKey}&select=id`, { key: serviceRoleKey });
+  assert(fencedMetadata.data?.length === 0, "Claimed cleanup race created metadata for a deletable object.");
   const rejectedPublish = await invoke(ownerToken, {
     action: "publish",
     listingId: requiredDraft,
