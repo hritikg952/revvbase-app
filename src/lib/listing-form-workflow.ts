@@ -11,6 +11,7 @@ import {
 interface CreateListingThroughPublicationInput {
   draftNotice: string;
   persistDraft: () => Promise<{ id: string }>;
+  uploadPhotos?: (listingId: string) => Promise<void>;
   publish: (
     listingId: string,
   ) => Promise<{ status: Extract<ListingLifecycleStatus, "draft" | "active"> }>;
@@ -67,11 +68,13 @@ export function getListingEditPageCopy(
 export async function createListingThroughPublication({
   draftNotice,
   persistDraft,
+  uploadPhotos,
   publish,
 }: CreateListingThroughPublicationInput): Promise<CreateListingOutcome> {
   const draft = await persistDraft();
 
   try {
+    await uploadPhotos?.(draft.id);
     const result = await publish(draft.id);
     if (result.status === "active") {
       return {

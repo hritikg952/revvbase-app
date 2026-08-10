@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { ListingImageManager } from "@/components/listing-image-manager";
 import type { Listing } from "@/lib/database.types";
@@ -13,7 +13,13 @@ import {
   invokeListingImageLifecycle,
   type ListingLifecycleStatus,
 } from "@/lib/listing-image-lifecycle-client";
-import { getImageLifecycleCopy } from "@/lib/listing-images";
+import {
+  appSettings,
+  getImageAcceptValue,
+  getImageCapacity,
+  getImageLifecycleCopy,
+} from "@/lib/listing-images";
+import { processListingPhotoSelection } from "@/lib/listing-image-manager";
 import {
   emptyListingForm,
   listingToForm,
@@ -38,8 +44,10 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [draftListing, setDraftListing] = useState<Listing | null>(null);
-  const editableListing = listing ?? draftListing;
+  const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
+  const [photoSelectionError, setPhotoSelectionError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const editableListing = listing;
   const imageStorage = useMemo(
     () => (editableListing ? createBrowserListingImageStorage() : null),
     [editableListing],
@@ -52,6 +60,23 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
       delete next[key];
       return next;
     });
+  }
+
+  function selectPhotos(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    if (files.length === 0) return;
+
+    const capacity = getImageCapacity(selectedPhotos.length, appSettings);
+    if (files.length > capacity.remaining) {
+      setPhotoSelectionError(
+        `You can add only ${capacity.remaining} more photo(s) to this listing.`,
+      );
+      return;
+    }
+
+    setSelectedPhotos((current) => [...current, ...files]);
+    setPhotoSelectionError(null);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -67,16 +92,16 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
     const payload = toListingPayload(values, user.id);
 
     try {
-      if (editableListing) {
+      if (listing) {
         const result = await supabase
           .from("listings")
           .update(getListingFieldUpdate(payload))
-          .eq("id", editableListing.id)
+          .eq("id", listing.id)
           .eq("seller_id", user.id)
           .select("id")
           .single();
         if (result.error) throw result.error;
-        router.push(listing ? "/my-listings" : `/listings/${editableListing.id}/edit?created=draft`);
+        router.push("/my-listings");
         return;
       }
 
@@ -92,6 +117,21 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
             throw result.error ?? new Error("The draft could not be saved.");
           }
           return { id: result.data.id };
+        },
+        uploadPhotos: async (listingId) => {
+          if (selectedPhotos.length === 0) return;
+          const result = await processListingPhotoSelection({
+            files: selectedPhotos,
+            images: [],
+            listingId,
+            sellerId: user.id,
+            upload: (input) => createBrowserListingImageStorage().upload(input),
+          });
+          if (result.selectionError || result.errors.length > 0) {
+            throw new Error(
+              result.selectionError ?? "One or more selected photos could not be uploaded.",
+            );
+          }
         },
         publish: async (listingId) => {
           const result = await invokeListingImageLifecycle({
@@ -111,35 +151,6 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
           ? error.message
           : "The listing could not be saved. Try again.",
       );
-      setPending(false);
-    }
-  }
-
-  async function saveDraftForPhotos() {
-    if (!user) return;
-    const nextErrors = validateListing(values);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length) return;
-
-    setPending(true);
-    setSubmitError(null);
-    try {
-      const result = await getSupabaseBrowserClient()
-        .from("listings")
-        .insert(toListingPayload(values, user.id))
-        .select("*")
-        .single();
-      if (result.error || !result.data) {
-        throw result.error ?? new Error("The draft could not be saved.");
-      }
-      setDraftListing(result.data as Listing);
-    } catch (error) {
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : "The draft could not be saved. Try again.",
-      );
-    } finally {
       setPending(false);
     }
   }
@@ -209,12 +220,12 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
         </label>
       </fieldset>
 
-      {editableListing && imageStorage ? (
+      {listing && imageStorage ? (
         <ListingImageManager
-          listingId={editableListing.id}
-          sellerId={editableListing.seller_id}
-          vehicleLabel={`${editableListing.make} ${editableListing.model}`}
-          initialStatus={editableListing.status}
+          listingId={listing.id}
+          sellerId={listing.seller_id}
+          vehicleLabel={`${listing.make} ${listing.model}`}
+          initialStatus={listing.status}
           storage={imageStorage}
           executeLifecycle={invokeListingImageLifecycle}
           onStatusChange={onLifecycleStatusChange}
@@ -223,18 +234,31 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
         <fieldset className="photo-manager photo-manager-setup">
           <legend>Photos</legend>
           <div className="photo-manager-heading">
-            <p>{getImageLifecycleCopy().emptyState}</p>
+            <p>
+              {selectedPhotos.length > 0
+                ? `${selectedPhotos.length} photo(s) selected. They will upload when you publish.`
+                : getImageLifecycleCopy().emptyState}
+            </p>
+            <input
+              ref={photoInputRef}
+              className="visually-hidden"
+              type="file"
+              multiple
+              accept={getImageAcceptValue(appSettings)}
+              onChange={selectPhotos}
+            />
             <button
               className="button button-small photo-add-button"
               type="button"
-              disabled={pending}
-              onClick={() => void saveDraftForPhotos()}
+              disabled={pending || selectedPhotos.length >= appSettings.images.maxPerListing}
+              onClick={() => photoInputRef.current?.click()}
             >
-              {pending ? "Saving draft…" : "Add photos"}
+              Add photos
             </button>
           </div>
+          {photoSelectionError && <p className="form-alert error" role="alert">{photoSelectionError}</p>}
           <p className="field-hint">
-            Save your listing details first, then you can upload and manage up to 5 photos independently.
+            Choose up to {appSettings.images.maxPerListing} photos now. They upload after the listing draft is saved.
           </p>
         </fieldset>
       )}
