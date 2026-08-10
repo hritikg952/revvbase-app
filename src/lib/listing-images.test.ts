@@ -465,6 +465,31 @@ describe("draft-first listing publication", () => {
     });
   });
 
+  it("uploads selected photos to the saved draft before publishing it", async () => {
+    const calls: string[] = [];
+
+    await createListingThroughPublication({
+      draftNotice: "Your listing is ready to publish without photos.",
+      persistDraft: async () => {
+        calls.push("persist-draft");
+        return { id: "listing-with-photos" };
+      },
+      uploadPhotos: async (listingId) => {
+        calls.push(`upload:${listingId}`);
+      },
+      publish: async (listingId) => {
+        calls.push(`publish:${listingId}`);
+        return { status: "active" };
+      },
+    });
+
+    expect(calls).toEqual([
+      "persist-draft",
+      "upload:listing-with-photos",
+      "publish:listing-with-photos",
+    ]);
+  });
+
   it("keeps the persisted owner draft reachable when protected publication requires a photo", async () => {
     const outcome = await createListingThroughPublication({
       draftNotice: "Your listing is saved as a draft. Add photos to publish it.",
