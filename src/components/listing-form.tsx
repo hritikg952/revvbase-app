@@ -38,9 +38,11 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [draftListing, setDraftListing] = useState<Listing | null>(null);
+  const editableListing = listing ?? draftListing;
   const imageStorage = useMemo(
-    () => (listing ? createBrowserListingImageStorage() : null),
-    [listing],
+    () => (editableListing ? createBrowserListingImageStorage() : null),
+    [editableListing],
   );
 
   function update<K extends keyof ListingFormValues>(key: K, value: ListingFormValues[K]) {
@@ -65,16 +67,16 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
     const payload = toListingPayload(values, user.id);
 
     try {
-      if (listing) {
+      if (editableListing) {
         const result = await supabase
           .from("listings")
           .update(getListingFieldUpdate(payload))
-          .eq("id", listing.id)
+          .eq("id", editableListing.id)
           .eq("seller_id", user.id)
           .select("id")
           .single();
         if (result.error) throw result.error;
-        router.push("/my-listings");
+        router.push(listing ? "/my-listings" : `/listings/${editableListing.id}/edit?created=draft`);
         return;
       }
 
@@ -109,6 +111,35 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
           ? error.message
           : "The listing could not be saved. Try again.",
       );
+      setPending(false);
+    }
+  }
+
+  async function saveDraftForPhotos() {
+    if (!user) return;
+    const nextErrors = validateListing(values);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setPending(true);
+    setSubmitError(null);
+    try {
+      const result = await getSupabaseBrowserClient()
+        .from("listings")
+        .insert(toListingPayload(values, user.id))
+        .select("*")
+        .single();
+      if (result.error || !result.data) {
+        throw result.error ?? new Error("The draft could not be saved.");
+      }
+      setDraftListing(result.data as Listing);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "The draft could not be saved. Try again.",
+      );
+    } finally {
       setPending(false);
     }
   }
@@ -178,16 +209,34 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
         </label>
       </fieldset>
 
-      {listing && imageStorage && (
+      {editableListing && imageStorage ? (
         <ListingImageManager
-          listingId={listing.id}
-          sellerId={listing.seller_id}
-          vehicleLabel={`${listing.make} ${listing.model}`}
-          initialStatus={listing.status}
+          listingId={editableListing.id}
+          sellerId={editableListing.seller_id}
+          vehicleLabel={`${editableListing.make} ${editableListing.model}`}
+          initialStatus={editableListing.status}
           storage={imageStorage}
           executeLifecycle={invokeListingImageLifecycle}
           onStatusChange={onLifecycleStatusChange}
         />
+      ) : (
+        <fieldset className="photo-manager photo-manager-setup">
+          <legend>Photos</legend>
+          <div className="photo-manager-heading">
+            <p>{getImageLifecycleCopy().emptyState}</p>
+            <button
+              className="button button-small photo-add-button"
+              type="button"
+              disabled={pending}
+              onClick={() => void saveDraftForPhotos()}
+            >
+              {pending ? "Saving draft…" : "Add photos"}
+            </button>
+          </div>
+          <p className="field-hint">
+            Save your listing details first, then you can upload and manage up to 5 photos independently.
+          </p>
+        </fieldset>
       )}
 
       {submitError && <p className="form-alert error" role="alert">{submitError}</p>}
