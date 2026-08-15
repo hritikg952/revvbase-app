@@ -55,6 +55,35 @@ export interface ProcessListingPhotoSelectionResult {
   selectionError: string | null;
 }
 
+export interface SelectedPhotoPreview {
+  id: string;
+  index: number;
+  file: File;
+  fileName: string;
+  objectUrl: string;
+  ordinal: number;
+  isCover: boolean;
+}
+
+export function getSelectedPhotoPreviews(
+  files: File[],
+  createObjectUrl: (file: File) => string = URL.createObjectURL,
+  startIndex = 0,
+): SelectedPhotoPreview[] {
+  return files.map((file, fileIndex) => {
+    const index = startIndex + fileIndex;
+    return {
+      id: `${index}-${file.name}-${file.size}-${file.lastModified}`,
+      index,
+      file,
+      fileName: file.name,
+      objectUrl: createObjectUrl(file),
+      ordinal: index + 1,
+      isCover: index === 0,
+    };
+  });
+}
+
 function emit(
   onFileState: ProcessListingPhotoSelectionInput["onFileState"],
   id: string,

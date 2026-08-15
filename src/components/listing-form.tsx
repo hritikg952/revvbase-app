@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { ListingImageManager } from "@/components/listing-image-manager";
 import type { Listing } from "@/lib/database.types";
@@ -19,7 +19,11 @@ import {
   getImageCapacity,
   getImageLifecycleCopy,
 } from "@/lib/listing-images";
-import { processListingPhotoSelection } from "@/lib/listing-image-manager";
+import {
+  getSelectedPhotoPreviews,
+  processListingPhotoSelection,
+  type SelectedPhotoPreview,
+} from "@/lib/listing-image-manager";
 import {
   emptyListingForm,
   listingToForm,
@@ -44,14 +48,20 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
+  const [selectedPhotoPreviews, setSelectedPhotoPreviews] = useState<SelectedPhotoPreview[]>([]);
   const [photoSelectionError, setPhotoSelectionError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const selectedPhotoPreviewsRef = useRef<SelectedPhotoPreview[]>([]);
   const editableListing = listing;
   const imageStorage = useMemo(
     () => (editableListing ? createBrowserListingImageStorage() : null),
     [editableListing],
   );
+  useEffect(() => {
+    return () => {
+      selectedPhotoPreviewsRef.current.forEach((preview) => URL.revokeObjectURL(preview.objectUrl));
+    };
+  }, []);
 
   function update<K extends keyof ListingFormValues>(key: K, value: ListingFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -67,7 +77,7 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
     event.currentTarget.value = "";
     if (files.length === 0) return;
 
-    const capacity = getImageCapacity(selectedPhotos.length, appSettings);
+    const capacity = getImageCapacity(selectedPhotoPreviews.length, appSettings);
     if (files.length > capacity.remaining) {
       setPhotoSelectionError(
         `You can add only ${capacity.remaining} more photo(s) to this listing.`,
@@ -75,7 +85,32 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
       return;
     }
 
-    setSelectedPhotos((current) => [...current, ...files]);
+    setSelectedPhotoPreviews((current) => {
+      const next = [
+        ...current,
+        ...getSelectedPhotoPreviews(files, URL.createObjectURL, current.length),
+      ];
+      selectedPhotoPreviewsRef.current = next;
+      return next;
+    });
+    setPhotoSelectionError(null);
+  }
+
+  function removeSelectedPhoto(index: number) {
+    setSelectedPhotoPreviews((current) => {
+      const removed = current[index];
+      if (removed) URL.revokeObjectURL(removed.objectUrl);
+      const next = current
+        .filter((_, currentIndex) => currentIndex !== index)
+        .map((preview, nextIndex) => ({
+          ...preview,
+          index: nextIndex,
+          ordinal: nextIndex + 1,
+          isCover: nextIndex === 0,
+        }));
+      selectedPhotoPreviewsRef.current = next;
+      return next;
+    });
     setPhotoSelectionError(null);
   }
 
@@ -119,9 +154,9 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
           return { id: result.data.id };
         },
         uploadPhotos: async (listingId) => {
-          if (selectedPhotos.length === 0) return;
+          if (selectedPhotoPreviews.length === 0) return;
           const result = await processListingPhotoSelection({
-            files: selectedPhotos,
+            files: selectedPhotoPreviews.map((preview) => preview.file),
             images: [],
             listingId,
             sellerId: user.id,
@@ -235,8 +270,8 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
           <legend>Photos</legend>
           <div className="photo-manager-heading">
             <p>
-              {selectedPhotos.length > 0
-                ? `${selectedPhotos.length} photo(s) selected. They will upload when you publish.`
+              {selectedPhotoPreviews.length > 0
+                ? `${selectedPhotoPreviews.length} photo(s) selected. They will upload when you publish.`
                 : getImageLifecycleCopy().emptyState}
             </p>
             <input
@@ -250,13 +285,39 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
             <button
               className="button button-small photo-add-button"
               type="button"
-              disabled={pending || selectedPhotos.length >= appSettings.images.maxPerListing}
+              disabled={pending || selectedPhotoPreviews.length >= appSettings.images.maxPerListing}
               onClick={() => photoInputRef.current?.click()}
             >
               Add photos
             </button>
           </div>
           {photoSelectionError && <p className="form-alert error" role="alert">{photoSelectionError}</p>}
+          {selectedPhotoPreviews.length > 0 && (
+            <div className="photo-grid">
+              {selectedPhotoPreviews.map((preview) => (
+                <article className="photo-tile" key={preview.id}>
+                  <div className="photo-frame">
+                    <img
+                      src={preview.objectUrl}
+                      alt={`${preview.fileName} selected for upload`}
+                    />
+                    {preview.isCover && <span className="photo-cover-label">Cover</span>}
+                  </div>
+                  <div className="photo-tile-caption">
+                    <span className="photo-file-name">Photo {preview.ordinal}</span>
+                    <button
+                      className="text-button destructive photo-remove-button"
+                      type="button"
+                      disabled={pending}
+                      onClick={() => removeSelectedPhoto(preview.index)}
+                    >
+                      Remove photo
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
           <p className="field-hint">
             Choose up to {appSettings.images.maxPerListing} photos now. They upload after the listing draft is saved.
           </p>

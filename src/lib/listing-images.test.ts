@@ -26,6 +26,7 @@ import {
 } from "./listing-image-lifecycle-client";
 import {
   getOrderedPhotoTiles,
+  getSelectedPhotoPreviews,
   processListingPhotoSelection,
   publishPersistedListing,
   reconcilePhotoDeletionStatus,
@@ -572,6 +573,30 @@ describe("immediate listing photo uploads", () => {
     position: 0,
     createdAt: "2026-08-01T00:00:00.000Z",
   };
+
+  it("creates ordered local previews for photos selected before publishing", () => {
+    const first = imageFile("front.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const second = imageFile("side.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
+    const createObjectUrl = vi.fn((file: File) => `blob:${file.name}`);
+
+    expect(getSelectedPhotoPreviews([first, second], createObjectUrl)).toEqual([
+      expect.objectContaining({
+        index: 0,
+        fileName: "front.jpg",
+        objectUrl: "blob:front.jpg",
+        ordinal: 1,
+        isCover: true,
+      }),
+      expect.objectContaining({
+        index: 1,
+        fileName: "side.jpg",
+        objectUrl: "blob:side.jpg",
+        ordinal: 2,
+        isCover: false,
+      }),
+    ]);
+    expect(createObjectUrl).toHaveBeenCalledTimes(2);
+  });
 
   it("adds each valid file independently while preserving ready photos and ordered cover state", async () => {
     const second = imageFile("second.jpg", "image/jpeg", [0xff, 0xd8, 0xff]);
