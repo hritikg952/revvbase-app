@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { ListingCardView } from "@/lib/listing-image-consumers";
 import { formatPrice, formatVehicleType } from "@/lib/listings";
 
@@ -11,6 +12,7 @@ export function ListingCard({ card }: { card: ListingCardView }) {
 
   return (
     <article className="listing-card">
+      <Link href={`/listings/${listing.id}`} className="listing-card-link" aria-label={`View ${listing.make} ${listing.model}`}>
       <div className="listing-image-wrap">
         <img
           src={imageSrc}
@@ -34,6 +36,7 @@ export function ListingCard({ card }: { card: ListingCardView }) {
           <div><dt>City</dt><dd>{listing.city}</dd></div>
         </dl>
       </div>
+      </Link>
     </article>
   );
 }
