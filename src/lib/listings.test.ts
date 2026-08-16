@@ -5,6 +5,7 @@ import {
   toListingPayload,
   validateListing,
 } from "./listings";
+import { getVehicleBrandById, getVehicleModelById } from "./data/vehicles";
 
 const validForm = {
   ...emptyListingForm,
@@ -45,6 +46,29 @@ describe("listing form contract", () => {
       city: "Pune",
       price_inr: 85000,
       status: "draft",
+    });
+  });
+
+  it("persists make and model strings selected from the local catalog", () => {
+    const brand = getVehicleBrandById("honda");
+    const model = getVehicleModelById("honda", "activa-6g");
+    expect(brand).toBeDefined();
+    expect(model).toBeDefined();
+
+    const payload = toListingPayload(
+      {
+        ...validForm,
+        make: ` ${brand!.name} `,
+        model: ` ${model!.name} `,
+        fuel_type: model!.fuelType,
+      },
+      "owner-1",
+    );
+
+    expect(payload).toMatchObject({
+      make: "Honda",
+      model: "Activa 6G",
+      fuel_type: "petrol",
     });
   });
 

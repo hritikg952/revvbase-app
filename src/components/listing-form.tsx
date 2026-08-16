@@ -31,6 +31,12 @@ import {
   validateListing,
   type ListingFormValues,
 } from "@/lib/listings";
+import {
+  getVehicleBrandById,
+  getVehicleModelById,
+  resolveVehicleSelection,
+  vehicleCatalog,
+} from "@/lib/data/vehicles";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { createBrowserListingImageStorage } from "@/lib/storage/browser-listing-image-storage";
 
@@ -45,6 +51,9 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
   const [values, setValues] = useState<ListingFormValues>(
     listing ? listingToForm(listing) : emptyListingForm,
   );
+  const [selectedBrandId, setSelectedBrandId] = useState(() =>
+    resolveVehicleSelection(values.make, values.model).brand?.id ?? "",
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -57,6 +66,11 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
     () => (editableListing ? createBrowserListingImageStorage() : null),
     [editableListing],
   );
+  const vehicleSelection = resolveVehicleSelection(values.make, values.model);
+  const selectedBrand = getVehicleBrandById(selectedBrandId);
+  const selectedModelId = selectedBrand?.models.find(
+    (model) => model.name === values.model,
+  )?.id ?? "";
   useEffect(() => {
     return () => {
       selectedPhotoPreviewsRef.current.forEach((preview) => URL.revokeObjectURL(preview.objectUrl));
@@ -70,6 +84,20 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
       delete next[key];
       return next;
     });
+  }
+
+  function selectBrand(brandId: string) {
+    const brand = getVehicleBrandById(brandId);
+    setSelectedBrandId(brandId);
+    update("make", brand?.name ?? "");
+    update("model", "");
+  }
+
+  function selectModel(modelId: string) {
+    const model = selectedBrand ? getVehicleModelById(selectedBrand.id, modelId) : undefined;
+    if (!model) return;
+    update("model", model.name);
+    update("fuel_type", model.fuelType);
   }
 
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) {
@@ -220,8 +248,35 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
               <option value="not_applicable">Not applicable</option>
             </select>
           </label>
-          <FormInput label="Make" value={values.make} error={errors.make} onChange={(value) => update("make", value)} maxLength={100} />
-          <FormInput label="Model" value={values.model} error={errors.model} onChange={(value) => update("model", value)} maxLength={100} />
+          <label>
+            Make
+            <select
+              value={selectedBrandId}
+              onChange={(event) => selectBrand(event.target.value)}
+              aria-invalid={Boolean(errors.make)}
+            >
+              <option value="">{vehicleSelection.retainedMake ?? "Select a brand"}</option>
+              {vehicleCatalog.map((brand) => (
+                <option key={brand.id} value={brand.id}>{brand.name}</option>
+              ))}
+            </select>
+            {errors.make && <span className="field-error">{errors.make}</span>}
+          </label>
+          <label>
+            Model
+            <select
+              value={selectedModelId}
+              onChange={(event) => selectModel(event.target.value)}
+              disabled={!selectedBrand}
+              aria-invalid={Boolean(errors.model)}
+            >
+              <option value="">{vehicleSelection.retainedModel ?? "Select a model"}</option>
+              {selectedBrand?.models.map((model) => (
+                <option key={model.id} value={model.id}>{model.name}</option>
+              ))}
+            </select>
+            {errors.model && <span className="field-error">{errors.model}</span>}
+          </label>
           <FormInput label="Year" type="number" value={values.year} error={errors.year} onChange={(value) => update("year", value)} min="1900" max={String(new Date().getFullYear() + 1)} />
         </div>
       </fieldset>
