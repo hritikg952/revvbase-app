@@ -20,7 +20,7 @@ export interface ListingCardView {
 }
 
 export interface OwnerListingCardView extends ListingCardView {
-  statusLabel: "Draft" | "Active";
+  statusLabel: "Draft" | "Active" | "Booked";
   editHref: string;
   publicHref: null;
 }
@@ -38,7 +38,7 @@ export function getPublicListingCards(
   imagesByListing: ReadonlyMap<string, readonly ListingImage[]>,
 ): ListingCardView[] {
   return listings
-    .filter((listing) => listing.status === "active")
+    .filter((listing) => listing.status === "active" || listing.status === "booked")
     .map((listing) => {
       const coverUrl = getCoverUrl(imagesByListing.get(listing.id));
       return {
@@ -55,8 +55,8 @@ export function getOwnerListingCards(
 ): OwnerListingCardView[] {
   return listings
     .filter(
-      (listing): listing is Listing & { status: "draft" | "active" } =>
-        listing.status === "draft" || listing.status === "active",
+      (listing): listing is Listing & { status: "draft" | "active" | "booked" } =>
+        listing.status === "draft" || listing.status === "active" || listing.status === "booked",
     )
     .map((listing) => {
       const coverUrl = getCoverUrl(imagesByListing.get(listing.id));
@@ -64,7 +64,7 @@ export function getOwnerListingCards(
         listing,
         coverUrl,
         hasCoverPhoto: coverUrl !== LISTING_IMAGE_PLACEHOLDER,
-        statusLabel: listing.status === "draft" ? "Draft" : "Active",
+        statusLabel: listing.status === "draft" ? "Draft" : listing.status === "booked" ? "Booked" : "Active",
         editHref: `/listings/${listing.id}/edit`,
         publicHref: null,
       };

@@ -11,7 +11,7 @@ export type FuelType =
   | "hybrid"
   | "not_applicable";
 
-export const LISTING_STATUSES = ["draft", "active", "deleted"] as const;
+export const LISTING_STATUSES = ["draft", "active", "booked", "deleted"] as const;
 
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
@@ -47,4 +47,36 @@ export interface ListingImageRow {
   storage_key: string;
   position: number;
   created_at: string;
+}
+
+export type ConversationStatus = "open" | "agreed" | "locked";
+export type NegotiationMessageKind = "text" | "offer";
+export type OfferStatus = "pending" | "superseded" | "declined" | "accepted";
+
+export interface ListingConversation {
+  id: string;
+  listing_id: string;
+  buyer_id: string;
+  seller_id: string;
+  status: ConversationStatus;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+}
+
+export interface NegotiationMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  kind: NegotiationMessageKind;
+  body: string | null;
+  offer_amount_inr: number | null;
+  offer_status: OfferStatus | null;
+  created_at: string;
+}
+
+export interface ConversationRead {
+  conversation_id: string;
+  user_id: string;
+  last_read_at: string;
 }

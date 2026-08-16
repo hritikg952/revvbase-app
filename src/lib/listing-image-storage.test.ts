@@ -316,8 +316,9 @@ describe("draft listing lifecycle contract", () => {
     expect(payload.status).toBe("draft");
   });
 
-  it("keeps draft, active, and deleted as distinct persisted states", () => {
-    expect(["draft", "active", "deleted"].map(isListingStatus)).toEqual([
+  it("keeps draft, active, booked, and deleted as distinct persisted states", () => {
+    expect(["draft", "active", "booked", "deleted"].map(isListingStatus)).toEqual([
+      true,
       true,
       true,
       true,

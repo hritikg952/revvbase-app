@@ -35,7 +35,7 @@ export type ListingImageLifecycleAction =
   | DeleteListingAction
   | CompensateListingImageUploadAction
   | ReserveListingImageUploadCleanupAction;
-export type ListingLifecycleStatus = "draft" | "active" | "deleted";
+export type ListingLifecycleStatus = "draft" | "active" | "booked" | "deleted";
 
 export interface ListingImageLifecycleResult {
   action: ListingImageLifecycleAction["action"];

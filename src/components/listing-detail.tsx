@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "@/components/auth-provider";
+import { OfferSheet } from "@/components/offer-sheet";
 import type { Listing } from "@/lib/database.types";
 import type { DetailImageDescriptor } from "@/lib/listing-detail-images";
 import { formatPrice, formatVehicleType } from "@/lib/listings";
@@ -14,6 +18,11 @@ export function ListingDetail({
   images: readonly DetailImageDescriptor[];
 }) {
   const name = `${listing.make} ${listing.model}`;
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const [offering, setOffering] = useState(false);
+  const isOwner = user?.id === listing.seller_id;
+  const isBooked = listing.status === "booked";
 
   return (
     <article className="listing-detail">
@@ -34,10 +43,7 @@ export function ListingDetail({
             <div><dt>Owners</dt><dd>{listing.previous_owners}</dd></div>
             {listing.insurance_valid_until && <div><dt>Insurance</dt><dd>{listing.insurance_valid_until}</dd></div>}
           </dl>
-          <button type="button" className="button button-wide detail-quote" disabled>
-            Request a quote
-          </button>
-          <p className="detail-cta-note">Quote requests are coming soon.</p>
+          {isBooked ? <><span className="status-badge booked detail-booked">Booked</span><p className="detail-cta-note">Price agreed — this vehicle is no longer accepting offers.</p></> : isOwner ? <p className="detail-cta-note">This is your listing. Manage it from My listings.</p> : <><button type="button" className="button button-wide detail-quote" disabled={loading} onClick={() => user ? setOffering(true) : router.push(`/auth?next=/listings/${listing.id}`)}>{loading ? "Checking session…" : "Make an offer"}</button><p className="detail-cta-note">Make an offer to start a private negotiation.</p></>}
         </div>
       </div>
       {listing.description && (
@@ -47,6 +53,7 @@ export function ListingDetail({
           <p>{listing.description}</p>
         </section>
       )}
+      {offering && <OfferSheet listingId={listing.id} vehicleName={name} onClose={() => setOffering(false)} onCreated={(conversationId) => router.push(`/messages?conversation=${conversationId}`)} />}
     </article>
   );
 }

@@ -25,11 +25,10 @@ export default function ListingDetailPage() {
         .from("listings")
         .select("id, seller_id, vehicle_type, make, model, year, odometer_km, price_inr, city, fuel_type, previous_owners, insurance_valid_until, description, status, created_at, updated_at")
         .eq("id", id)
-        .eq("status", "active")
         .maybeSingle();
 
       if (!active) return;
-      if (error || !data || (data as Listing).status !== "active") {
+      if (error || !data || !["active", "booked"].includes((data as Listing).status)) {
         setListing(null);
         setImages([]);
         setLoading(false);

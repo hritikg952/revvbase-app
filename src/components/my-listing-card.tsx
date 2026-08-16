@@ -49,7 +49,9 @@ export function MyListingCard({ card, onDeleted }: MyListingCardProps) {
         <p>{formatPrice(listing.price_inr)} · {listing.city}</p>
       </div>
       <div className="card-actions">
-        {pending ? (
+        {listing.status === "booked" ? (
+          <Link className="button button-secondary button-small" href="/messages">View negotiation</Link>
+        ) : pending ? (
           <span className="button button-secondary button-small" aria-disabled="true">
             Edit
           </span>

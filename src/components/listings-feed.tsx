@@ -23,7 +23,7 @@ export function ListingsFeed() {
     const { data, error: queryError } = await getSupabaseBrowserClient()
       .from("listings")
       .select("id, seller_id, vehicle_type, make, model, year, odometer_km, price_inr, city, fuel_type, previous_owners, insurance_valid_until, description, status, created_at, updated_at")
-      .eq("status", "active")
+      .in("status", ["active", "booked"])
       .order("created_at", { ascending: false });
 
     if (queryError) {
@@ -31,7 +31,7 @@ export function ListingsFeed() {
       setCards([]);
     } else {
       const activeListings = ((data ?? []) as Listing[]).filter(
-        (listing) => listing.status === "active",
+        (listing) => listing.status === "active" || listing.status === "booked",
       );
       const storage = createBrowserListingImageStorage();
       const imageEntries = await Promise.all(

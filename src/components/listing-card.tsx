@@ -26,6 +26,7 @@ export function ListingCard({ card }: { card: ListingCardView }) {
           }}
         />
         <span className="vehicle-pill">{formatVehicleType(listing.vehicle_type)}</span>
+        {listing.status === "booked" && <span className="listing-booked-pill">Booked</span>}
       </div>
       <div className="listing-card-body">
         <p className="listing-price">{formatPrice(listing.price_inr)}</p>

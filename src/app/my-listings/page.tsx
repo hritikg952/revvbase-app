@@ -28,12 +28,12 @@ export default function MyListingsPage() {
       .from("listings")
       .select("id, seller_id, vehicle_type, make, model, year, odometer_km, price_inr, city, fuel_type, previous_owners, insurance_valid_until, description, status, created_at, updated_at")
       .eq("seller_id", user.id)
-      .in("status", ["draft", "active"])
+      .in("status", ["draft", "active", "booked"])
       .order("created_at", { ascending: false });
     if (queryError) setError(queryError.message);
     else {
       const managedListings = ((data ?? []) as Listing[]).filter(
-        (listing) => listing.status === "draft" || listing.status === "active",
+        (listing) => listing.status === "draft" || listing.status === "active" || listing.status === "booked",
       );
       const storage = createBrowserListingImageStorage();
       const imageEntries = await Promise.all(

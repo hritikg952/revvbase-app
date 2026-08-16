@@ -201,10 +201,10 @@ export function ListingForm({ listing, onLifecycleStatusChange }: ListingFormPro
             action: "publish",
             listingId,
           });
-          if (result.status === "deleted") {
+          if (result.status === "deleted" || result.status === "booked") {
             throw new Error("The saved draft is no longer available.");
           }
-          return { status: result.status };
+          return { status: result.status as "draft" | "active" };
         },
       });
       router.push(outcome.destination);
