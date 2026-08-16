@@ -11,7 +11,7 @@
 
 ### Storage-provider boundary
 - **D-01:** Use Supabase Storage for this phase, but application code must use a provider-neutral image-storage interface. The listing feature must not contain Supabase Storage calls, bucket paths, or provider-specific URLs outside the infrastructure adapter. A future R2 adapter should implement the same internal contract. — **Reversibility:** costly — the interface becomes the boundary used by forms, data access, and rendering.
-- **D-02:** Active listing images are public, stable CDN-addressable assets. Object authorization still restricts upload and deletion to the listing owner; deleting an image removes the object permanently. Signed URLs are deferred for future private media.
+- **D-02:** Listing image objects use public, stable CDN-addressable URLs, including objects attached to a `draft` listing. Object authorization still restricts upload and deletion to the listing owner; deleting an image removes the object permanently. Draft listing records and image metadata remain owner-visible only in the application; public listing queries return active records only. Signed URLs and private draft staging/promotion are deferred production hardening.
 - **D-03:** Model images as a separate one-to-many `listing_images` resource with listing reference, storage key, stable public URL/derivation, and creation order. The first uploaded image is the cover. Reordering is deferred. — **Reversibility:** costly — this replaces the legacy single `listings.image_url` field and establishes the public data contract.
 
 ### Upload, optimization, and lifecycle
@@ -24,6 +24,7 @@
 ### Application configuration
 - **D-09:** Add a versioned, extensible JSON configuration file for static application settings. Its initial responsibility is image-upload rules: images required, maximum images per listing, accepted source types, stored size cap, and image processing/display limits needed by the implementation. The schema should be easy to extend to other static application settings later.
 - **D-10:** Configuration changes take effect when the application is rebuilt and deployed. The configuration is a shared source for application validation and UX, not a substitute for server/storage-side authorization and enforcement.
+- **D-11:** `images.required` controls protected draft publication. Every new listing is initially `draft`; `false` permits protected activation with zero images, while `true` requires a persisted image before activation. Draft records and metadata are owner-visible and excluded from public listing queries; their public-bucket object URLs remain intentionally reachable in this MVP. Removing the final image from an active required-image listing first returns it to `draft`, then permanently removes object and metadata; listing-wide cleanup continues object → metadata → `deleted`.
 
 ### the agent's Discretion
 - Determine the exact provider-neutral interface, configuration file location/schema, canonical encoding library or service, dimensions/quality targets, database migration sequence, and thumbnail/variant approach after researching browser and Supabase constraints.
@@ -34,18 +35,18 @@
 - Image reordering and manually selecting a cover image.
 - Listing-detail gallery and zoom UI.
 - Cloudflare R2 integration or any other second provider; only the migration-ready boundary is in scope.
-- Private/signed image delivery, image retention/recovery, user-wide quotas, moderation, and advanced image processing.
+- Private/signed image delivery, private draft-bucket staging and promotion to public delivery, image retention/recovery, user-wide quotas, moderation, and advanced image processing.
 </user_constraints>
 
 ## Summary
 
-Use a **public `listing-images` Supabase bucket** with a provider-neutral application contract. The browser must normalize a selected photo to one canonical WebP file before upload, then use the contract to upload it, create one `listing_images` metadata row, and obtain a stable public URL. The listing UI interacts only with a `ListingImageService`; the Supabase-specific bucket name, key convention, Storage SDK calls, and public URL derivation remain inside a Supabase adapter. [CITED: https://supabase.com/docs/guides/storage/buckets/fundamentals] [CITED: https://supabase.com/docs/guides/storage/serving/downloads]
+Use a **public `listing-images` Supabase bucket** with a provider-neutral application contract. The browser must normalize a selected photo to one canonical WebP file before upload, then use the contract to upload it, create one `listing_images` metadata row, and obtain a stable public URL. This MVP intentionally permits that object URL to resolve even while its parent listing is a draft; privacy at this stage is limited to owner-only application visibility of draft listings and their metadata. The listing UI interacts only with a `ListingImageService`; the Supabase-specific bucket name, key convention, Storage SDK calls, and public URL derivation remain inside a Supabase adapter. [CITED: https://supabase.com/docs/guides/storage/buckets/fundamentals] [CITED: https://supabase.com/docs/guides/storage/serving/downloads]
 
-Public delivery is compatible with strict write access: a public bucket bypasses read authorization only. Browser uploads and deletes still require RLS policies on `storage.objects`. Use a key owned by the authenticated user, `sellerId/listingId/random-id.webp`, and policy predicates that check both that first segment and the referenced listing's `seller_id`. Do not manipulate `storage.objects` directly: Supabase documents that metadata deletion alone does not delete the provider object. [CITED: https://supabase.com/docs/guides/storage/security/access-control] [CITED: https://supabase.com/docs/guides/storage/schema/design]
+Public delivery is compatible with strict write access: a public bucket bypasses read authorization only. Browser uploads require narrowly scoped RLS policies on `storage.objects`; permanent object deletion is reserved for the JWT-validated lifecycle Edge Function so it can preserve metadata/status sequencing. Use a key owned by the authenticated user, `sellerId/listingId/random-id.webp`, and policy predicates that check both that first segment and the referenced listing's `seller_id`. Do not manipulate `storage.objects` directly: Supabase documents that metadata deletion alone does not delete the provider object. [CITED: https://supabase.com/docs/guides/storage/security/access-control] [CITED: https://supabase.com/docs/guides/storage/schema/design]
 
 The selected 1 MB limit must be enforced **after** transformation—the actual stored file—not against the camera original. Browser Canvas can encode JPEG/WebP, but HEIC/HEIF is not a safe native decode assumption across all target browsers; the image normalizer needs a dynamically imported, reviewed HEIC decoder for those source files and must report a clear failure where conversion cannot run. The planner must include a human package-legitimacy checkpoint before selecting/installing that decoder, because registry metadata could not be verified in this research environment. [CITED: https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob]
 
-**Primary recommendation:** Build a client-only `normalizeListingImage()` pipeline that produces one WebP asset (long edge 2560 px; quality is stepped down until ≤1 MB), then persist it through an application-owned `ListingImageStorage` contract backed by a Supabase adapter; use `listing_images` metadata plus a database-enforced maximum-count trigger and a protected cleanup flow that removes real storage objects before deleting metadata and setting the existing listing status to `deleted`.
+**Primary recommendation:** Build a client-only `normalizeListingImage()` pipeline that produces one WebP asset (long edge 2560 px; quality is stepped down until ≤1 MB), then persist it through an application-owned `ListingImageStorage` contract backed by a Supabase adapter. Use `listing_images` metadata plus a database-enforced maximum-count trigger and a protected lifecycle function: new listings start as owner-only `draft`; a database-mirrored `images.required` policy permits activation with zero images only when false; final-image removal from an active required listing first returns it to draft; and listing-wide cleanup removes real storage objects before metadata before setting `deleted`.
 
 ## Architectural Responsibility Map
 
@@ -56,8 +57,8 @@ The selected 1 MB limit must be enforced **after** transformation—the actual s
 | Object bytes, stable public delivery | Database / Storage | CDN / Static | Supabase Storage owns object bytes; its public bucket delivers stable CDN-addressable URLs. |
 | Image metadata and cover ordering | Database / Storage | Browser / Client | `listing_images` is the durable one-to-many domain record; `created_at`/monotonic order determines cover. |
 | Owner authorization and cross-resource invariant | Database / Storage | API / Backend | RLS and database trigger/RPC enforce owner and max-count rules even if client-side checks are bypassed. |
-| Listing/image permanent cleanup | API / Backend | Database / Storage | A single application cleanup operation coordinates provider-object deletion with metadata deletion and the existing listing soft-delete status transition; database cascades only remove metadata, not Storage bytes. |
-| Static upload settings | Browser / Client | Database / Storage | Versioned JSON controls UX/normalizer; bucket/RLS/DB rules remain a deliberate deployment-side mirror. |
+| Listing publication and permanent cleanup | API / Backend | Database / Storage | A single protected lifecycle operation activates drafts only under the mirrored image policy, coordinates final-photo draft reversion, and handles object/metadata/deleted sequencing; database cascades only remove metadata, not Storage bytes. |
+| Static upload settings | Browser / Client | Database / Storage | Versioned JSON controls UX/normalizer; the migration-owned policy mirror controls lifecycle authorization and must ship in the same release. |
 
 ## Project Constraints (from AGENTS.md)
 
@@ -92,7 +93,7 @@ The selected 1 MB limit must be enforced **after** transformation—the actual s
 |---|---|---|
 | Client normalization + direct Supabase adapter | Server/Edge Function image processing | Stronger uniform decoding and secret-managed provider writes, but adds compute/service design and moves the MVP's small, direct authenticated upload path server-side. Deferred unless HEIC package verification or device testing fails. |
 | Store one canonical original-sized WebP | Store canonical plus card/detail variants | Variants reduce transfer for cards, but add transformation/storage lifecycle and complicate provider-neutral contract. Store one max-2560px canonical asset now; let Next/Supabase delivery optimization be a later change behind `publicUrl`. |
-| Public stable URL | Signed URLs | Signed URLs are needed for private media, but add expiry/refresh behavior and impair caching; they contradict the locked public-listing-media decision. |
+| Public stable URL, including drafts | Signed URLs or private staging/promotion | Signed URLs and private draft staging are deferred production hardening; this MVP accepts publicly resolvable object URLs while application queries still hide draft records and metadata. |
 
 **Installation:**
 
@@ -275,7 +276,7 @@ The plan must add a documented deployment checklist: changing `maxPerListing`, `
 
 **Why it happens:** Public buckets only bypass read access. Upload/delete remain subject to Storage RLS and missing policies yield 403 errors. [CITED: https://supabase.com/docs/guides/storage/buckets/fundamentals]
 
-**How to avoid:** Create policies for `INSERT`, matching `SELECT`, and `DELETE` scoped to `listing-images`, the authenticated user key prefix, and the listing owner relationship. Test an owner, a different user, and anonymous access.
+**How to avoid:** Create browser policies for `INSERT` and matching `SELECT` scoped to `listing-images`, the authenticated user key prefix, and the listing owner relationship. Reserve object deletion for the protected lifecycle function, and test owner, different-user, anonymous, and direct-browser-delete denial.
 
 **Warning signs:** Upload returns an RLS 403 even with a valid session; Supabase notes its upload API performs a `RETURNING` operation, so a matching `SELECT` policy may be necessary. [CITED: https://supabase.com/docs/guides/troubleshooting/storage-error-403-forbidden-new-row-violates-row-level-security-policy-on-upload-a94384]
 
@@ -407,7 +408,7 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
 
 2. **HEIC decoder — resolved to a human package-approval gate.** No package is preselected. The implementation installs exactly the package and version approved at the retained checkpoint, dynamically imports it only in the client normalizer, and keeps JPEG/PNG/WebP usable if a particular HEIC conversion fails. This fulfills D-05's "where technically supportable" boundary.
 
-3. **Deletion recovery — resolved to protected retryable cleanup.** A JWT-validated Supabase Edge Function owns permanent photo removal and the listing soft-delete transition. It enumerates authoritative metadata, removes every object, deletes the corresponding metadata rows, then sets the existing listing row to `status = 'deleted'` using server authority. If object removal fails, it leaves the listing active and rows intact for retry; direct browser DELETE policies and direct browser deleted-status updates are denied so callers cannot bypass this sequence. This fulfills D-08 and prevents storage orphans.
+3. **Draft publication and deletion recovery — resolved to protected lifecycle operations.** New listings are always inserted as `draft`. A JWT-validated Supabase Edge Function reads the migration-owned mirror of `images.required` before activating: zero images are allowed only when the mirror is false; otherwise one persisted row is required. Public listing policies remain `status = 'active'`, while owner policies include drafts. The public bucket deliberately serves stable object URLs for draft photos too; private staging and promotion are deferred production hardening. For final-photo removal from an active required listing, the function first changes the listing to `draft`, then removes the object and metadata; if removal fails it remains a safe draft with the image available for retry or republish. For listing-wide deletion it enumerates authoritative metadata, removes every object, deletes metadata, then changes the existing row to `deleted`. Direct browser status changes and deletes are denied. This fulfills D-08 and D-11 without orphaning an active required-image listing.
 
 ## Environment Availability
 
@@ -474,7 +475,7 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
 | Pattern | STRIDE | Standard mitigation |
 |---|---|---|
 | Upload to another seller's listing/key | Tampering / Elevation | RLS policy checks `auth.uid()`, user key prefix, and referenced listing `seller_id`; metadata RLS independently checks owner. |
-| Delete another user's media | Tampering | `DELETE` policy scopes owner/key/listing; UI does not grant authority. |
+| Delete another user's media | Tampering | Browser DELETE policies are absent; the lifecycle function verifies JWT ownership and authoritative metadata/key binding. |
 | MIME/extension spoofing or malformed image | Tampering | Decode before use, canonical WebP encoding, inspect output MIME/bytes; bucket only accepts canonical MIME and max byte limit. |
 | Object or metadata orphaning | Denial of service / cost | Adapter compensation and explicit listing cleanup; no direct Storage metadata mutation. |
 | Excessive uploads / count bypass | Denial of service | Bucket byte cap, config UX checks, DB trigger/function cap with locking. |

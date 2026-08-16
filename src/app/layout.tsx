@@ -3,6 +3,8 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { SiteHeader } from "@/components/site-header";
 
+import { Analytics } from "@vercel/analytics/next"
+
 export const metadata: Metadata = {
   title: "Revvbase — Used two-wheelers in India",
   description: "Browse and list second-hand motorcycles, scooters, electric two-wheelers, and bicycles.",
@@ -19,6 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <div className="shell">Revvbase · A simpler way to pass two-wheelers forward.</div>
           </footer>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
