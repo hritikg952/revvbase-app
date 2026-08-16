@@ -98,17 +98,16 @@ Expected terminal output includes a local URL and a ready message. Open `http://
 The signed-out home page should show:
 
 - The Revvbase header and marketplace hero
-- Four synthetic demo listing cards
-- Royal Enfield Classic 350, Honda Activa 6G, Ather 450X, and Firefox Bad Attitude 8
+- Active or booked listing cards when the connected project has listings
 - Sign-in and Sell controls
 
 Then verify the core loop when needed:
 
 1. Create an email/password test account or sign in with an existing test account.
 2. Reload the page and confirm the session remains signed in.
-3. Open Sell and create a synthetic listing.
-4. Open My listings and edit it.
-5. Sign out and confirm the active listing appears publicly.
+3. Open Sell, create a synthetic listing, and add at least one photo.
+4. Open My listings and edit it when needed.
+5. Sign out and confirm the active listing's cover appears on the home page and its `/listings/[id]` detail page.
 6. Remove temporary test data when validation is finished.
 
 Use synthetic test information only. Do not alter a real user's account or listing.
@@ -127,8 +126,8 @@ npm audit --audit-level=moderate
 Expected results:
 
 - TypeScript exits successfully.
-- Vitest reports four passing tests.
-- Next.js builds `/`, `/auth`, `/sell`, `/my-listings`, and `/listings/[id]/edit`.
+- Vitest passes the listing, image-storage, listing-detail, vehicle-catalog, and negotiation suites.
+- Next.js builds `/`, `/auth`, `/sell`, `/my-listings`, `/messages`, `/listings/[id]`, and `/listings/[id]/edit`.
 - npm reports zero known vulnerabilities at the selected audit level.
 
 ## Production-build smoke test without hosting
@@ -150,6 +149,7 @@ Read-only or transactional verification commands:
 
 ```bash
 supabase migration list --linked
+supabase functions list --project-ref qokumaemcqwkqhrxyolc
 supabase db query --linked --file supabase/tests/rls.sql
 supabase db advisors --linked --type security
 supabase db advisors --linked --type performance
@@ -179,7 +179,7 @@ lsof -nP -iTCP:3000 -sTCP:LISTEN
 
 Do not terminate an unfamiliar process without the owner's approval. Stop the known Revvbase process with `Ctrl+C`, then start it again. Prefer port 3000 because Supabase Auth is configured for the localhost origin.
 
-### The page loads but listings do not
+### The page loads but listings or photos do not
 
 Check:
 
@@ -187,6 +187,8 @@ Check:
 - That `.env.local` points to project ref `qokumaemcqwkqhrxyolc`
 - Browser developer-console errors
 - Supabase project status
+- That `supabase migration list --linked` reports matching local and remote versions
+- That both listing-image cleanup Edge Functions are active
 
 Do not replace the hosted project with a local Supabase instance as a startup workaround.
 

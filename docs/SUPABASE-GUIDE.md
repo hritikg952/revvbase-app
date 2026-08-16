@@ -49,18 +49,20 @@ Treat the service-role key like a master key: it can bypass normal user-facing s
 
 1. A seller creates a listing. It begins as a private **draft**.
 2. The seller adds photos. The browser validates and optimizes a photo before uploading it.
-3. Supabase Storage holds the photo file; the database stores its position and which listing owns it.
+3. Supabase Storage holds the photo file; the `listing_images` table stores its position and which listing owns it.
 4. The first photo is the cover photo.
 5. Publishing makes the listing visible to visitors when the image rule allows it.
 6. Deleting a photo or listing removes its records and storage files permanently.
 
 The current MVP allows up to five photos per listing and uses the settings file in `src/config/app-settings.json` for upload rules. Changing a rule there may also require a matching database migration; it is not enough to change browser validation alone.
 
+The website gets a cover image by reading the first ordered `listing_images` row and deriving its public Storage URL. The listing detail page reads the same ordered records for its gallery. If no usable photo exists, both views intentionally show the stock two-wheeler illustration.
+
 ## When photo cleanup needs attention
 
-Most photo cleanup happens immediately. If Supabase Storage has a temporary problem, Revvbase records a durable cleanup job so it is not forgotten.
+Most photo cleanup happens immediately. If Supabase Storage has a temporary problem, Revvbase records a durable cleanup job so it is not forgotten. A newly selected photo starts with a reserved cleanup record; registration of the photo with its listing cancels that reservation. This prevents a successful upload from being cleaned up before the public card and detail page can use it.
 
-For now, retries are **manual**. Automatic five-minute scheduling with Supabase Vault and Cron is deliberately deferred.
+For now, retries are **manual**. The deployed `listing-image-cleanup-retry` Edge Function is available for a trusted operator to run; automatic five-minute scheduling with Supabase Vault and Cron is deliberately deferred.
 
 An operator can run the retry function from a trusted terminal after it has been deployed:
 
@@ -73,6 +75,17 @@ curl -X POST \
 ```
 
 Do not run this command in a browser, paste its service key into a chat, or store the key in the repository. A successful response reports how many cleanup jobs were processed.
+
+## Photo visibility release check
+
+When releasing a change that affects listing photos:
+
+1. Apply every pending migration with `supabase db push --linked`.
+2. Deploy both `listing-image-cleanup` and `listing-image-cleanup-retry` when their source changes.
+3. Run `supabase migration list --linked` and confirm every local migration has the same remote version.
+4. Create a test listing with one photo, publish it, and verify the cover on the public home page and on `/listings/[id]` in a signed-out browser.
+
+<!-- VERIFY: The linked Supabase project's current migration and Edge Function versions are external state; confirm them with the CLI before each release. -->
 
 ## Routine release checklist
 
