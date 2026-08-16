@@ -34,7 +34,7 @@ export async function loadConversationSummaries(userId: string): Promise<Convers
   const [{ data: listings, error: listingsError }, { data: profiles }, { data: messages }, { data: reads }] = await Promise.all([
     supabase.from("listings").select(listingFields).in("id", listingIds),
     supabase.from("profiles").select("id, display_name").in("id", personIds),
-    supabase.from("negotiation_messages").select("id, conversation_id, sender_id, kind, body, offer_amount_inr, offer_status, created_at").in("conversation_id", ids).order("created_at", { ascending: false }),
+    supabase.from("negotiation_messages").select("id, conversation_id, sender_id, kind, body, offer_amount_inr, offer_status, offer_resolved_by, created_at").in("conversation_id", ids).order("created_at", { ascending: false }),
     supabase.from("conversation_reads").select("conversation_id, user_id, last_read_at").eq("user_id", userId).in("conversation_id", ids),
   ]);
   if (listingsError) throw listingsError;
@@ -60,7 +60,7 @@ export async function loadConversationSummaries(userId: string): Promise<Convers
 
 export async function loadConversationMessages(conversationId: string) {
   const { data, error } = await getSupabaseBrowserClient().from("negotiation_messages")
-    .select("id, conversation_id, sender_id, kind, body, offer_amount_inr, offer_status, created_at")
+    .select("id, conversation_id, sender_id, kind, body, offer_amount_inr, offer_status, offer_resolved_by, created_at")
     .eq("conversation_id", conversationId).order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as NegotiationMessage[];
@@ -76,6 +76,8 @@ export const createInitialOffer = (listingId: string, amount: number, note: stri
 export const sendNegotiationMessage = (conversationId: string, body: string) => rpc("send_negotiation_message", { p_conversation_id: conversationId, p_body: body });
 export const makeCounterOffer = (conversationId: string, amount: number) => rpc("make_counter_offer", { p_conversation_id: conversationId, p_amount_inr: amount });
 export const declineOffer = (offerId: string) => rpc("decline_offer", { p_offer_id: offerId });
+export const restoreDeclinedOffer = (offerId: string) => rpc("restore_declined_offer", { p_offer_id: offerId });
 export const acceptOffer = (offerId: string) => rpc("accept_offer", { p_offer_id: offerId });
+export const undoAcceptedOffer = (offerId: string) => rpc("undo_accepted_offer", { p_offer_id: offerId });
 export const reopenBookedListing = (listingId: string) => rpc("reopen_booked_listing", { p_listing_id: listingId });
 export const markConversationRead = (conversationId: string) => rpc("mark_conversation_read", { p_conversation_id: conversationId });

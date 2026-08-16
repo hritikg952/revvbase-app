@@ -72,6 +72,7 @@ export interface NegotiationMessage {
   body: string | null;
   offer_amount_inr: number | null;
   offer_status: OfferStatus | null;
+  offer_resolved_by: string | null;
   created_at: string;
 }
 

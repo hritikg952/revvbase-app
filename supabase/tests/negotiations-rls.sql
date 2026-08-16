@@ -30,9 +30,15 @@ do $$
 declare offer_id uuid; conversation_id uuid;
 begin
   select id, conversation_id into offer_id, conversation_id from public.negotiation_messages where offer_status = 'pending';
+  perform public.decline_offer(offer_id);
+  perform public.restore_declined_offer(offer_id);
   perform public.accept_offer(offer_id);
   if (select status from public.listings where id = '31000000-0000-4000-8000-000000000001') <> 'booked' then raise exception 'Accepted offer must book listing'; end if;
   if (select status from public.listing_conversations where id = conversation_id) <> 'agreed' then raise exception 'Accepted thread must remain available for coordination'; end if;
+  perform public.undo_accepted_offer(offer_id);
+  if (select status from public.listings where id = '31000000-0000-4000-8000-000000000001') <> 'active' then raise exception 'Seller must be able to undo an accidental acceptance'; end if;
+  if (select status from public.listing_conversations where id = conversation_id) <> 'open' then raise exception 'Undoing acceptance must restore the selected negotiation'; end if;
+  perform public.accept_offer(offer_id);
   perform public.reopen_booked_listing('31000000-0000-4000-8000-000000000001');
   if (select status from public.listings where id = '31000000-0000-4000-8000-000000000001') <> 'active' then raise exception 'Seller must be able to reopen booked listing'; end if;
 end $$;
