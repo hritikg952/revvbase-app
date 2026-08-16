@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A beginner-friendly circuit-board city explaining how Revvbase, Supabase, and future Vercel hosting work together.">
+  <title>Revvbase Architecture City</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e7f6f1;
+      --muted: #9db7b1;
+      --faint: #6e8882;
+      --board: #071715;
+      --board-deep: #04100f;
+      --panel: rgba(12, 35, 31, 0.92);
+      --panel-strong: #102d27;
+      --line: rgba(82, 211, 165, 0.2);
+      --green: #55e0ae;
+      --green-soft: #b4f4d7;
+      --blue: #75b8ff;
+      --yellow: #f2c56d;
+      --pink: #ff91b8;
+      --shadow: 0 18px 70px rgba(0, 0, 0, 0.36);
+      --radius: 18px;
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(66, 177, 142, 0.12), transparent 28rem),
+        radial-gradient(circle at 90% 10%, rgba(117, 184, 255, 0.1), transparent 24rem),
+        var(--board-deep);
+      font-family: var(--font);
+      line-height: 1.5;
+    }
+
+    button { font: inherit; }
+    button:focus-visible, summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+    .page { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 64px; }
+    .eyebrow { color: var(--green); font: 700 0.72rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { max-width: 820px; margin-bottom: 16px; font-size: clamp(2.2rem, 6vw, 5.2rem); line-height: 0.98; letter-spacing: -0.055em; }
+    h2 { margin-bottom: 10px; font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -0.03em; }
+    h3 { margin-bottom: 8px; font-size: 1rem; }
+    .lede { max-width: 720px; margin-bottom: 28px; color: var(--muted); font-size: clamp(1rem, 2vw, 1.18rem); }
+    .hero { padding-bottom: 24px; }
+    .hero-note { display: inline-flex; align-items: center; gap: 9px; color: var(--green-soft); font-size: 0.86rem; }
+    .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 6px rgba(85, 224, 174, 0.1); }
+
+    .section { margin-top: 28px; }
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
+    .section-heading p { max-width: 570px; margin-bottom: 0; color: var(--muted); font-size: 0.93rem; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 16px 18px; color: var(--muted); font-size: 0.84rem; }
+    .legend-item { display: inline-flex; align-items: center; gap: 8px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.active { background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .dot.future { background: var(--blue); box-shadow: 0 0 12px var(--blue); }
+    .dot.legacy { background: var(--pink); box-shadow: 0 0 12px var(--pink); }
+    .dot.trace { width: 23px; height: 2px; border-radius: 1px; background: var(--green); }
+
+    .city-card { overflow: hidden; }
+    .city-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-bottom: 1px solid var(--line); }
+    .city-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tab, .flow-button, .step-button {
+      border: 1px solid rgba(157, 183, 177, 0.24);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.035);
+      cursor: pointer;
+      transition: 160ms ease;
+    }
+    .tab { padding: 9px 13px; font-size: 0.83rem; }
+    .tab:hover, .flow-button:hover, .step-button:hover { border-color: rgba(85, 224, 174, 0.65); color: var(--ink); transform: translateY(-1px); }
+    .tab[aria-selected="true"], .flow-button[aria-pressed="true"] { border-color: var(--green); color: var(--board-deep); background: var(--green); font-weight: 700; }
+    .city-label { color: var(--muted); font-size: 0.79rem; }
+    .board {
+      position: relative;
+      min-height: 610px;
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(85, 224, 174, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(85, 224, 174, 0.055) 1px, transparent 1px),
+        radial-gradient(circle at 50% 48%, rgba(20, 82, 68, 0.54), transparent 58%),
+        var(--board);
+      background-size: 32px 32px, 32px 32px, auto, auto;
+    }
+    .board::before, .board::after { content: ""; position: absolute; pointer-events: none; border: 1px solid rgba(85, 224, 174, 0.12); border-radius: 50%; }
+    .board::before { inset: 13% 18%; }
+    .board::after { inset: 25% 31%; border-style: dashed; }
+    .traces { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.8; }
+    .trace-path { fill: none; stroke: rgba(85, 224, 174, 0.4); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 6 8; animation: drift 22s linear infinite; }
+    .trace-path.secondary { stroke: rgba(117, 184, 255, 0.28); animation-duration: 28s; }
+    .trace-node { fill: var(--green); }
+    @keyframes drift { to { stroke-dashoffset: -280; } }
+
+    .board-view { display: none; position: absolute; inset: 0; }
+    .board-view.is-visible { display: block; }
+    .district-title { position: absolute; z-index: 1; left: 22px; top: 20px; color: rgba(180, 244, 215, 0.6); font: 700 0.7rem/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; }
+    .city-node {
+      position: absolute;
+      z-index: 3;
+      left: var(--x);
+      top: var(--y);
+      width: clamp(112px, 17vw, 178px);
+      min-height: 94px;
+      padding: 12px;
+      border: 1px solid rgba(85, 224, 174, 0.42);
+      border-radius: 14px;
+      color: var(--ink);
+      background: linear-gradient(145deg, rgba(21, 59, 49, 0.98), rgba(8, 28, 24, 0.98));
+      box-shadow: 0 0 0 1px rgba(85, 224, 174, 0.04), 0 14px 28px rgba(0, 0, 0, 0.28);
+      text-align: left;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+      transition: 180ms ease;
+    }
+    .city-node:hover, .city-node.is-selected { border-color: var(--green); box-shadow: 0 0 0 4px rgba(85, 224, 174, 0.11), 0 0 32px rgba(85, 224, 174, 0.16); transform: translate(-50%, -50%) translateY(-3px); }
+    .city-node.is-highlighted { border-color: var(--yellow); box-shadow: 0 0 0 5px rgba(242, 197, 109, 0.16), 0 0 38px rgba(242, 197, 109, 0.26); animation: glow 1.5s ease-in-out infinite alternate; }
+    .city-node.is-dimmed { opacity: 0.36; }
+    .city-node.future { border-color: rgba(117, 184, 255, 0.6); }
+    .city-node.legacy { border-color: rgba(255, 145, 184, 0.6); border-style: dashed; }
+    .node-kicker { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; color: var(--green-soft); font: 700 0.63rem/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+    .city-node.future .node-kicker { color: var(--blue); }
+    .city-node.legacy .node-kicker { color: var(--pink); }
+    .node-title { display: block; margin-bottom: 4px; font-size: 0.92rem; font-weight: 750; line-height: 1.08; }
+    .node-subtitle { display: block; color: var(--muted); font-size: 0.72rem; line-height: 1.25; }
+    @keyframes glow { to { filter: brightness(1.16); } }
+
+    .node-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(270px, 0.55fr); gap: 18px; padding: 20px; border-top: 1px solid var(--line); background: rgba(6, 20, 18, 0.76); }
+    .node-panel h3 { font-size: 1.24rem; }
+    .node-panel .analogy { margin: 0 0 13px; color: var(--green-soft); font-size: 1.05rem; }
+    .node-panel p { margin-bottom: 10px; color: var(--muted); font-size: 0.91rem; }
+    .node-panel strong { color: var(--ink); }
+    .node-meta { display: flex; flex-direction: column; gap: 11px; }
+    .mini-card { padding: 13px; border: 1px solid rgba(157, 183, 177, 0.16); border-radius: 12px; background: rgba(255, 255, 255, 0.025); }
+    .mini-label { margin-bottom: 6px; color: var(--faint); font: 700 0.66rem/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+    .mini-card p { margin: 0; color: var(--ink); font-size: 0.82rem; }
+    details { border-top: 1px solid rgba(157, 183, 177, 0.15); }
+    details summary { padding: 12px 0 2px; color: var(--green-soft); font-size: 0.83rem; cursor: pointer; }
+    details p { padding-top: 8px; }
+    code { color: var(--yellow); font: 0.82em var(--mono); overflow-wrap: anywhere; }
+
+    .flows { display: grid; grid-template-columns: 0.32fr 0.68fr; gap: 16px; }
+    .flow-menu, .flow-detail { padding: 16px; }
+    .flow-menu h3 { margin: 0 0 11px; color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+    .flow-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    .flow-button { padding: 9px 11px; font-size: 0.78rem; }
+    .flow-detail { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 15px; }
+    .flow-progress { color: var(--green); font: 700 0.7rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+    .flow-detail h3 { margin-bottom: 5px; font-size: 1.12rem; }
+    .flow-detail p { margin-bottom: 0; color: var(--muted); font-size: 0.88rem; }
+    .flow-controls { display: flex; gap: 7px; }
+    .step-button { padding: 8px 10px; font-size: 0.76rem; }
+    .step-button:disabled { cursor: not-allowed; opacity: 0.35; }
+    .flow-route { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 4px; }
+    .route-chip { padding: 7px 10px; border: 1px solid rgba(85, 224, 174, 0.25); border-radius: 9px; color: var(--green-soft); background: rgba(85, 224, 174, 0.06); font-size: 0.75rem; }
+    .route-arrow { color: var(--faint); }
+
+    .principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .principle { padding: 16px; }
+    .principle p { margin: 0; color: var(--muted); font-size: 0.86rem; }
+    .principle .number { color: var(--yellow); font: 700 0.72rem var(--mono); }
+    .footer-note { margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--faint); font-size: 0.76rem; }
+
+    @media (max-width: 760px) {
+      .page { width: min(100% - 22px, 640px); padding-top: 28px; }
+      .section-heading { display: block; }
+      .section-heading p { margin-top: 8px; }
+      .board { min-height: 650px; }
+      .node-panel, .flows { grid-template-columns: 1fr; }
+      .flow-detail { grid-template-columns: 1fr; }
+      .flow-controls { justify-content: flex-start; }
+      .principles { grid-template-columns: 1fr; }
+      .city-node { width: 124px; min-height: 88px; padding: 10px; }
+      .node-title { font-size: 0.8rem; }
+      .node-subtitle { font-size: 0.66rem; }
+      .district-title { left: 15px; }
+    }
+    @media (max-width: 420px) {
+      .board { min-height: 690px; }
+      .city-node { width: 112px; }
+      .city-node[style*="--y: 74%"], .city-node[style*="--y: 76%"] { top: 81%; }
+      .node-panel { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="eyebrow">Revvbase / system tour</div>
+      <h1>A marketplace city built on a circuit board.</h1>
+      <p class="lede">This map turns the application into a familiar city: the storefront is where people arrive, Supabase is the city that stores and protects the important things, and Vercel is the future building manager that puts the storefront online.</p>
+      <div class="hero-note"><span class="pulse" aria-hidden="true"></span>Start with the map. Click any district for a simple explanation.</div>
+    </header>
+
+    <section class="section" aria-labelledby="map-title">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">01 / the map</div>
+          <h2 id="map-title">How the pieces fit together</h2>
+        </div>
+        <p>The glowing traces are requests and information moving between places. A visitor can browse without signing in; a seller needs an identity pass before changing their own listings.</p>
+      </div>
+
+      <div class="card city-card">
+        <div class="city-toolbar">
+          <div class="city-tabs" role="tablist" aria-label="Architecture map layers">
+            <button class="tab" type="button" role="tab" aria-selected="true" data-view="overview">Whole application</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-view="supabase">Supabase city</button>
+          </div>
+          <div class="city-label" id="view-label">Zoom level: storefront → backend city</div>
+        </div>
+
+        <div class="board" id="city-board">
+          <svg class="traces" viewBox="0 0 1000 610" preserveAspectRatio="none" aria-hidden="true">
+            <path class="trace-path" d="M90 330 H205 V215 H330 V305 H455 V180 H620 V270 H760 V160 H910"></path>
+            <path class="trace-path secondary" d="M120 470 H260 V530 H430 V420 H560 V500 H730 V410 H885"></path>
+            <path class="trace-path" d="M330 520 V360 H455 V305"></path>
+            <circle class="trace-node" cx="205" cy="215" r="4"></circle><circle class="trace-node" cx="455" cy="180" r="4"></circle><circle class="trace-node" cx="760" cy="160" r="4"></circle>
+          </svg>
+
+          <div class="board-view is-visible" data-board-view="overview">
+            <div class="district-title">City overview / active architecture</div>
+            <button class="city-node" style="--x: 10%; --y: 53%;" data-node="browser" aria-label="Open Visitor browser explanation">
+              <span class="node-kicker">Active · arrival</span><span class="node-title">Visitor browser</span><span class="node-subtitle">People discover bikes and scooters here.</span>
+            </button>
+            <button class="city-node future" style="--x: 30%; --y: 31%;" data-node="vercel" aria-label="Open future Vercel hosting explanation">
+              <span class="node-kicker">Future · host</span><span class="node-title">Vercel building</span><span class="node-subtitle">A future home for the Next.js storefront.</span>
+            </button>
+            <button class="city-node" style="--x: 49%; --y: 52%;" data-node="nextjs" aria-label="Open Next.js storefront explanation">
+              <span class="node-kicker">Active · storefront</span><span class="node-title">Next.js storefront</span><span class="node-subtitle">The pages, forms, and screens people use.</span>
+            </button>
+            <button class="city-node" style="--x: 70%; --y: 30%;" data-node="supabase-gateway" aria-label="Open Supabase city entrance explanation">
+              <span class="node-kicker">Active · entrance</span><span class="node-title">Supabase city gate</span><span class="node-subtitle">One doorway to identity, data, photos, and live updates.</span>
+            </button>
+            <button class="city-node" style="--x: 86%; --y: 54%;" data-node="supabase-services" aria-label="Open Supabase services explanation">
+              <span class="node-kicker">Active · city</span><span class="node-title">Supabase services</span><span class="node-subtitle">The protected backend districts behind Revvbase.</span>
+            </button>
+            <button class="city-node" style="--x: 47%; --y: 78%;" data-node="analytics" aria-label="Open analytics explanation">
+              <span class="node-kicker">Active · signals</span><span class="node-title">Vercel Analytics</span><span class="node-subtitle">A small measurement layer included in the app shell.</span>
+            </button>
+            <button class="city-node legacy" style="--x: 78%; --y: 79%;" data-node="legacy-backend" aria-label="Open legacy backend explanation">
+              <span class="node-kicker">Legacy · parked</span><span class="node-title">Old FastAPI town</span><span class="node-subtitle">Kept for history; not part of the active MVP runtime.</span>
+            </button>
+          </div>
+
+          <div class="board-view" data-board-view="supabase">
+            <div class="district-title">Supabase city / service districts</div>
+            <button class="city-node" style="--x: 16%; --y: 31%;" data-node="auth" aria-label="Open Supabase Auth identity office explanation">
+              <span class="node-kicker">Active · identity</span><span class="node-title">Auth office</span><span class="node-subtitle">Checks who you are and keeps your session.</span>
+            </button>
+            <button class="city-node" style="--x: 49%; --y: 25%;" data-node="postgres" aria-label="Open PostgreSQL records office explanation">
+              <span class="node-kicker">Active · records</span><span class="node-title">Postgres records office</span><span class="node-subtitle">Stores listings, users, offers, and conversations.</span>
+            </button>
+            <button class="city-node" style="--x: 83%; --y: 31%;" data-node="rls" aria-label="Open Row Level Security gate explanation">
+              <span class="node-kicker">Active · guard</span><span class="node-title">RLS security gates</span><span class="node-subtitle">Checks which rows each visitor may see or change.</span>
+            </button>
+            <button class="city-node" style="--x: 20%; --y: 65%;" data-node="storage" aria-label="Open Storage photo warehouse explanation">
+              <span class="node-kicker">Active · files</span><span class="node-title">Photo warehouse</span><span class="node-subtitle">Stores the actual listing images.</span>
+            </button>
+            <button class="city-node" style="--x: 50%; --y: 54%;" data-node="rpc" aria-label="Open RPC and trigger machinery explanation">
+              <span class="node-kicker">Active · machinery</span><span class="node-title">RPC / trigger engine</span><span class="node-subtitle">Runs protected actions and keeps changes consistent.</span>
+            </button>
+            <button class="city-node" style="--x: 80%; --y: 64%;" data-node="edge" aria-label="Open Edge Functions maintenance station explanation">
+              <span class="node-kicker">Active · workers</span><span class="node-title">Edge workers</span><span class="node-subtitle">Clean up image files when a request needs extra work.</span>
+            </button>
+            <button class="city-node" style="--x: 35%; --y: 86%;" data-node="realtime" aria-label="Open Realtime communication wires explanation">
+              <span class="node-kicker">Active · live wire</span><span class="node-title">Realtime network</span><span class="node-subtitle">Carries fresh negotiation messages to participants.</span>
+            </button>
+            <button class="city-node" style="--x: 67%; --y: 86%;" data-node="migrations" aria-label="Open migrations control room explanation">
+              <span class="node-kicker">Active · planning</span><span class="node-title">Migration control room</span><span class="node-subtitle">Applies reviewed changes to the city’s structure.</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend" aria-label="Map legend">
+          <span class="legend-item"><span class="dot active"></span>Active now</span>
+          <span class="legend-item"><span class="dot future"></span>Future / planned</span>
+          <span class="legend-item"><span class="dot legacy"></span>Legacy / not active</span>
+          <span class="legend-item"><span class="dot trace"></span>Information moving along a trace</span>
+        </div>
+
+        <section class="node-panel" aria-live="polite" aria-atomic="true">
+          <div>
+            <div class="eyebrow">City guide</div>
+            <h3 id="node-title">Visitor browser</h3>
+            <p class="analogy" id="node-analogy">The front door of Revvbase.</p>
+            <p id="node-simple">This is where a person opens Revvbase, looks at vehicle cards, reads a listing, signs in, or fills out a selling form.</p>
+            <p><strong>Why it matters:</strong> <span id="node-why">It is the part people can see and touch.</span></p>
+            <p><strong>Example:</strong> <span id="node-example">A visitor opens the home page and asks the storefront for the latest active listings.</span></p>
+          </div>
+          <div class="node-meta">
+            <div class="mini-card"><div class="mini-label">Under the hood</div><p id="node-technical">The browser runs the Next.js/React interface and uses the Supabase client when it needs data or a session.</p></div>
+            <details>
+              <summary>Show repository references</summary>
+              <p id="node-references"><code>src/app/page.tsx</code><br><code>src/components/listings-feed.tsx</code></p>
+            </details>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="flow-title">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">02 / follow a request</div>
+          <h2 id="flow-title">What happens when…</h2>
+        </div>
+        <p>Choose a story and move one step at a time. The map will zoom to the district involved and highlight the path.</p>
+      </div>
+      <div class="flows">
+        <div class="card flow-menu">
+          <h3>Choose a story</h3>
+          <div class="flow-buttons" role="group" aria-label="Request walkthroughs">
+            <button class="flow-button" type="button" data-flow="browse" aria-pressed="true">Browse listings</button>
+            <button class="flow-button" type="button" data-flow="signin" aria-pressed="false">Sign in</button>
+            <button class="flow-button" type="button" data-flow="create" aria-pressed="false">Create listing</button>
+            <button class="flow-button" type="button" data-flow="photo" aria-pressed="false">Upload photo</button>
+            <button class="flow-button" type="button" data-flow="offer" aria-pressed="false">Make an offer</button>
+          </div>
+        </div>
+        <div class="card flow-detail">
+          <div>
+            <div class="flow-progress" id="flow-progress">Step 1 of 4 · Browse listings</div>
+            <h3 id="flow-title-text">A visitor asks to see bikes</h3>
+            <p id="flow-description">The browser sends a request through the storefront to Supabase. The security gate allows public visitors to see only listings marked active or booked.</p>
+          </div>
+          <div class="flow-controls">
+            <button class="step-button" type="button" id="flow-prev" disabled>← Back</button>
+            <button class="step-button" type="button" id="flow-next">Next →</button>
+          </div>
+          <div class="flow-route" id="flow-route" aria-label="Current request route"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="rules-title">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">03 / three things to remember</div>
+          <h2 id="rules-title">The city’s simple rules</h2>
+        </div>
+      </div>
+      <div class="principles">
+        <article class="card principle"><div class="number">01 / FRONT DOOR</div><h3>Vercel serves the storefront</h3><p>Vercel is the future place where the Next.js website can live online. It does not replace Supabase’s database or identity office.</p></article>
+        <article class="card principle"><div class="number">02 / CITY RECORDS</div><h3>Supabase holds the important state</h3><p>Accounts, listings, images, conversations, and offers live in Supabase services, not inside the browser.</p></article>
+        <article class="card principle"><div class="number">03 / SECURITY GATES</div><h3>RLS makes the final decision</h3><p>The interface can hide a button, but database Row Level Security is the real guard that decides who may read or change each record.</p></article>
+      </div>
+    </section>
+
+    <p class="footer-note">Architecture snapshot based on the active Revvbase source and Supabase migrations. Vercel hosting is currently future/planned; the historical <code>backend/</code> FastAPI tree is retained as legacy context. This explainer contains no credentials and makes no network requests.</p>
+  </main>
+
+  <script>
+    (() => {
+      const nodeData = {
+        browser: { title: "Visitor browser", analogy: "The front door of Revvbase.", simple: "This is where a person opens Revvbase, looks at vehicle cards, reads a listing, signs in, or fills out a selling form.", why: "It is the part people can see and touch.", example: "A visitor opens the home page and asks the storefront for the latest active listings.", technical: "The browser runs the Next.js/React interface and uses the Supabase client when it needs data or a session.", references: "src/app/page.tsx\nsrc/components/listings-feed.tsx" },
+        vercel: { title: "Vercel building manager", analogy: "The company that can put the storefront on a public street.", simple: "Vercel is a hosting platform. It can build and serve the Next.js website so people can reach it on the internet.", why: "A website needs a reliable place to run and be delivered to visitors.", example: "When deployment is resumed, Vercel could build the app and serve its pages around the world.", technical: "Vercel is compatible with the Next.js production build. Revvbase is not deployed there yet, so this district is future/planned.", references: "README.md\nnext.config.ts" },
+        nextjs: { title: "Next.js storefront", analogy: "The shops, roads, signs, and forms people use.", simple: "Next.js and React create the screens: the public feed, listing details, sign-in page, seller form, messages, and navigation.", why: "It turns backend information into a usable website.", example: "The listing form gathers a make, model, price, and city before sending them to the city records office.", technical: "The App Router pages live in src/app/ and reusable UI lives in src/components/. The root layout wraps the app in AuthProvider.", references: "src/app/layout.tsx\nsrc/app/page.tsx\nsrc/components/auth-provider.tsx" },
+        "supabase-gateway": { title: "Supabase city gate", analogy: "The main entrance where requests are directed to the right district.", simple: "The website uses one Supabase project as its backend. Requests arrive with a publishable browser key and are sent to Auth, data, storage, or live updates.", why: "The frontend needs a safe, organized way to talk to backend services.", example: "When a listing feed loads, the browser client asks Supabase for permitted listing rows.", technical: "The browser client is created by createClient with NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. The service-role key must never be placed in the browser.", references: "src/lib/supabase.ts\n.env.example\ndocs/SUPABASE-GUIDE.md" },
+        "supabase-services": { title: "Supabase services", analogy: "A city made of specialist districts rather than one giant building.", simple: "Supabase provides the identity office, records office, photo warehouse, security rules, live communication, and small backend workers.", why: "Each job has a clear home, which keeps the application simpler and safer.", example: "A photo upload can use Storage for the file, Postgres for its listing metadata, and an Edge Function for cleanup work.", technical: "The active project uses Supabase Auth, PostgreSQL/Data API, RLS, Storage, RPCs/triggers, Edge Functions, and Realtime publication.", references: "docs/SUPABASE-GUIDE.md\nsupabase/migrations/" },
+        analytics: { title: "Vercel Analytics", analogy: "A small traffic counter near the storefront.", simple: "This is an optional measurement layer included in the app shell. It helps understand visits; it is not where listings or accounts are stored.", why: "Product teams may need basic information about how the website is being used.", example: "The root layout includes the analytics component alongside the rest of the page shell.", technical: "The app imports Analytics from @vercel/analytics/next in src/app/layout.tsx.", references: "src/app/layout.tsx\npackage.json" },
+        "legacy-backend": { title: "Old FastAPI town", analogy: "An older neighborhood kept on the map for reference.", simple: "The repository still contains a Python/FastAPI backend, but the active MVP does not use it. Supabase replaced it as the hosted backend.", why: "Clear boundaries stop old code from being mistaken for the current runtime.", example: "You may find backend/app/listings/models.py, but a current browser request goes to Supabase instead.", technical: "README.md calls the backend/ tree legacy context. Do not add new runtime dependencies on FastAPI, Railway, or Alembic without a new product decision.", references: "README.md\nbackend/app/\nbackend/railway.toml" },
+        auth: { title: "Supabase Auth identity office", analogy: "The place that issues an identity pass.", simple: "Auth checks a person’s email and password, then gives the browser a session so the rest of the city knows who is acting.", why: "Private actions need to be connected to a real account.", example: "After signing in, the browser receives a session and the app can show the user’s own listings.", technical: "AuthProvider calls getSession and listens to onAuthStateChange. Supabase Auth supplies the user identity used by auth.uid() in policies.", references: "src/components/auth-provider.tsx\nsrc/components/auth-form.tsx\nsupabase/migrations/20260730170000_create_mvp_schema.sql" },
+        postgres: { title: "Postgres records office", analogy: "The city archive where the official records live.", simple: "This is the database. It stores users’ public profile details, vehicle listings, image records, conversations, offers, and read markers.", why: "The application needs durable records that survive after a browser closes.", example: "A listing becomes a row with its seller, vehicle details, price, city, and lifecycle status.", technical: "Core tables include profiles, vehicle_catalog, listings, listing_images, listing_conversations, negotiation_messages, and conversation_reads.", references: "supabase/migrations/20260730170000_create_mvp_schema.sql\nsupabase/migrations/20260816070000_add_negotiation_chat.sql" },
+        rls: { title: "Row Level Security gates", analogy: "Security guards checking every request against the visitor’s pass.", simple: "RLS decides which records a visitor is allowed to see or change. The page can hide controls, but these database guards are the final authority.", why: "A seller should not be able to edit another seller’s listing just by changing a browser request.", example: "Anonymous visitors can read public listings, while an authenticated seller can manage only their own rows.", technical: "Policies compare the current role and auth.uid() to listing status and seller_id. Tests prove anonymous visibility and owner-only writes.", references: "supabase/tests/rls.sql\nsupabase/migrations/20260730170000_create_mvp_schema.sql" },
+        storage: { title: "Supabase Storage photo warehouse", analogy: "A warehouse for the heavy packages that do not belong in the records ledger.", simple: "Storage keeps the actual photo files. The database keeps a small record saying which listing owns each file and what order it appears in.", why: "Images are files, while listing details are structured information; each belongs in the right place.", example: "The first registered image is position zero and becomes the listing cover image.", technical: "The listing-images bucket stores WebP objects. listing_images stores listing_id, storage_key, position, and created_at.", references: "src/lib/storage/supabase-listing-images.ts\nsupabase/migrations/20260801000000_add_listing_images_storage.sql" },
+        rpc: { title: "RPC and trigger engine", analogy: "Special machinery that performs protected city operations atomically.", simple: "Some actions are too important to perform as a loose collection of browser edits. The database runs a protected procedure so the whole action stays consistent.", why: "Offer acceptance, lifecycle changes, and image registration need rules that cannot be bypassed by a clever client.", example: "Accepting an offer marks it accepted, books the listing, and locks other open conversations together.", technical: "RPCs such as accept_offer, create_initial_offer, register_listing_image, and lifecycle functions run with database-controlled authority. Triggers maintain updated_at values.", references: "supabase/migrations/20260816070000_add_negotiation_chat.sql\nsupabase/migrations/20260801000000_add_listing_images_storage.sql" },
+        edge: { title: "Supabase Edge workers", analogy: "Maintenance workers dispatched for small backend jobs.", simple: "Edge Functions handle special server-side work that should not trust the browser, such as cleaning up an image file after a failed or deleted upload.", why: "A browser should not hold a master key or be responsible for every cleanup detail.", example: "If a file reaches Storage but its database registration fails, cleanup can be recorded and retried safely.", technical: "listing-image-cleanup uses authenticated user context; listing-image-cleanup-retry uses the service-role secret only inside the protected Edge runtime.", references: "supabase/functions/listing-image-cleanup/index.ts\nsupabase/functions/listing-image-cleanup-retry/index.ts" },
+        realtime: { title: "Supabase Realtime network", analogy: "Live communication wires between people already in the same conversation.", simple: "Realtime can notify participants when negotiation records change, so the inbox or conversation can feel alive without repeatedly asking for updates.", why: "Buyers and sellers should see fresh negotiation activity quickly.", example: "A new message or offer can be delivered to the people participating in that listing conversation.", technical: "listing_conversations and negotiation_messages are added to the Supabase realtime publication.", references: "supabase/migrations/20260816070000_add_negotiation_chat.sql\nsrc/components/messages-inbox.tsx" },
+        migrations: { title: "Migration control room", analogy: "The city planning office that applies reviewed changes to the streets and buildings.", simple: "Migrations are dated instructions for changing the database structure in a repeatable, reviewable way.", why: "The local code and hosted database need to agree on tables, rules, and functions.", example: "A migration can create a new conversations table or add the booked status to listings.", technical: "Supabase CLI applies files in supabase/migrations/. A migration may create tables, policies, indexes, triggers, functions, buckets, and realtime publication changes.", references: "supabase/migrations/\nsupabase/config.toml\nREADME.md" }
+      };
+
+      const flows = {
+        browse: { label: "Browse listings", steps: [
+          { view: "overview", node: "browser", title: "A visitor asks to see bikes", description: "The browser sends a request through the storefront to Supabase. The security gate allows public visitors to see only listings marked active or booked.", route: ["Visitor browser", "Next.js storefront", "Supabase gate", "RLS gate", "Listings records"] },
+          { view: "supabase", node: "rls", title: "The security gate checks the request", description: "No sign-in is required for public browsing. RLS filters out private drafts and deleted listings before the response leaves the city.", route: ["Public request", "RLS policy", "Active / booked rows"] },
+          { view: "supabase", node: "postgres", title: "The records office returns the permitted rows", description: "The page receives listing details such as make, model, price, city, and status, then turns them into vehicle cards.", route: ["Listings table", "Data response", "Vehicle cards"] },
+          { view: "overview", node: "browser", title: "The visitor sees the marketplace", description: "The browser never needed a password. It received only the public slice that the database rules allow.", route: ["Permitted rows", "Next.js UI", "Visitor sees listings"] }
+        ] },
+        signin: { label: "Sign in", steps: [
+          { view: "overview", node: "browser", title: "A person submits an email and password", description: "The sign-in form sends the credentials to the identity office rather than trying to decide locally whether the person is real.", route: ["Sign-in form", "Next.js client", "Auth office"] },
+          { view: "supabase", node: "auth", title: "Auth verifies the person and issues a session", description: "Supabase Auth returns a session. Think of it as a temporary identity pass that the browser can carry for later requests.", route: ["Email + password", "Auth check", "Session / identity pass"] },
+          { view: "supabase", node: "rls", title: "The pass is checked at every protected gate", description: "The app can now ask for owned listings, but the database still checks auth.uid() and seller_id before allowing access.", route: ["Session pass", "RLS guard", "Owner-only rows"] },
+          { view: "overview", node: "nextjs", title: "The storefront changes what the person can do", description: "The UI can show My Listings, Sell, or Messages because the user is signed in. The database remains the final authority.", route: ["Authenticated session", "Next.js UI", "Seller controls"] }
+        ] },
+        create: { label: "Create listing", steps: [
+          { view: "overview", node: "nextjs", title: "The seller fills out the listing form", description: "The storefront validates everyday details such as make, model, year, price, city, and vehicle type before sending the form onward.", route: ["Seller form", "Browser validation", "Listing payload"] },
+          { view: "supabase", node: "auth", title: "The request carries the seller’s identity", description: "The signed-in session tells Supabase who is creating the listing. The seller_id is not a free pass to impersonate somebody else.", route: ["Session", "Auth identity", "Create request"] },
+          { view: "supabase", node: "rls", title: "RLS confirms the seller can create their own row", description: "The security policy checks the authenticated user before allowing the insert into the listings table.", route: ["Create request", "RLS policy", "Allowed insert"] },
+          { view: "supabase", node: "postgres", title: "The new listing is saved as a draft", description: "The records office stores the vehicle details. The current flow starts with a draft so photos and protected publishing rules can be handled safely.", route: ["Listings table", "Draft row", "Seller can continue"] }
+        ] },
+        photo: { label: "Upload photo", steps: [
+          { view: "overview", node: "nextjs", title: "The browser prepares the photo", description: "The seller chooses a photo. The browser can normalize it to the allowed WebP format before it is sent to the photo warehouse.", route: ["Photo picker", "Browser normalizer", "WebP file"] },
+          { view: "supabase", node: "storage", title: "Storage receives the actual file", description: "The photo goes to the listing-images bucket. The database is not asked to carry the heavy image bytes.", route: ["WebP file", "Storage bucket", "Photo object"] },
+          { view: "supabase", node: "rpc", title: "The database registers ownership and order", description: "A protected registration call creates the listing_images record. Position zero becomes the cover image.", route: ["Photo object", "register_listing_image", "Image metadata"] },
+          { view: "supabase", node: "edge", title: "A maintenance worker handles failures", description: "If upload and registration get out of sync, the cleanup workflow records the work and can retry it without leaving forgotten files behind.", route: ["Cleanup job", "Edge worker", "Storage stays tidy"] }
+        ] },
+        offer: { label: "Make an offer", steps: [
+          { view: "overview", node: "browser", title: "A buyer chooses to make an offer", description: "The buyer must be signed in before starting a negotiation on somebody else’s active listing.", route: ["Listing detail", "Offer form", "Authenticated request"] },
+          { view: "supabase", node: "rpc", title: "A protected procedure creates the conversation", description: "The database checks that the listing is active, the buyer is not the seller, and the offer amount is positive before creating the conversation and offer.", route: ["create_initial_offer", "Conversation row", "Offer row"] },
+          { view: "supabase", node: "realtime", title: "Participants receive fresh negotiation activity", description: "Conversation and message records can be published through Realtime so the buyer and seller can stay up to date.", route: ["Message change", "Realtime network", "Buyer + seller inbox"] },
+          { view: "supabase", node: "postgres", title: "Accepting an offer changes the city records together", description: "The seller’s acceptance marks the offer accepted, books the listing, and locks other open conversations as one protected action.", route: ["accept_offer", "Booked listing", "Locked conversations"] }
+        ] }
+      };
+
+      const refsToMarkup = (value) => value.split("\n").map((ref) => `<code>${ref}</code>`).join("<br>");
+      const board = document.getElementById("city-board");
+      const viewLabel = document.getElementById("view-label");
+      const nodeTitle = document.getElementById("node-title");
+      const nodeAnalogy = document.getElementById("node-analogy");
+      const nodeSimple = document.getElementById("node-simple");
+      const nodeWhy = document.getElementById("node-why");
+      const nodeExample = document.getElementById("node-example");
+      const nodeTechnical = document.getElementById("node-technical");
+      const nodeReferences = document.getElementById("node-references");
+      const flowProgress = document.getElementById("flow-progress");
+      const flowTitle = document.getElementById("flow-title-text");
+      const flowDescription = document.getElementById("flow-description");
+      const flowRoute = document.getElementById("flow-route");
+      const prevButton = document.getElementById("flow-prev");
+      const nextButton = document.getElementById("flow-next");
+      let currentView = "overview";
+      let currentNode = "browser";
+      let currentFlow = "browse";
+      let currentStep = 0;
+
+      function setView(view) {
+        currentView = view;
+        document.querySelectorAll("[data-view]").forEach((button) => button.setAttribute("aria-selected", String(button.dataset.view === view)));
+        document.querySelectorAll("[data-board-view]").forEach((panel) => panel.classList.toggle("is-visible", panel.dataset.boardView === view));
+        viewLabel.textContent = view === "overview" ? "Zoom level: storefront → backend city" : "Zoom level: inside the Supabase backend city";
+      }
+
+      function showNode(id) {
+        const data = nodeData[id];
+        if (!data) return;
+        currentNode = id;
+        nodeTitle.textContent = data.title;
+        nodeAnalogy.textContent = data.analogy;
+        nodeSimple.textContent = data.simple;
+        nodeWhy.textContent = data.why;
+        nodeExample.textContent = data.example;
+        nodeTechnical.textContent = data.technical;
+        nodeReferences.innerHTML = refsToMarkup(data.references);
+        document.querySelectorAll(".city-node").forEach((node) => node.classList.toggle("is-selected", node.dataset.node === id));
+      }
+
+      function updateHighlights(step) {
+        document.querySelectorAll(".city-node").forEach((node) => {
+          const isCurrent = node.dataset.node === step.node;
+          node.classList.toggle("is-highlighted", isCurrent);
+          node.classList.toggle("is-dimmed", Boolean(step.node) && !isCurrent);
+        });
+      }
+
+      function renderFlow() {
+        const flow = flows[currentFlow];
+        const step = flow.steps[currentStep];
+        setView(step.view);
+        showNode(step.node);
+        updateHighlights(step);
+        flowProgress.textContent = `Step ${currentStep + 1} of ${flow.steps.length} · ${flow.label}`;
+        flowTitle.textContent = step.title;
+        flowDescription.textContent = step.description;
+        flowRoute.innerHTML = step.route.map((label, index) => `${index ? '<span class="route-arrow" aria-hidden="true">→</span>' : ""}<span class="route-chip">${label}</span>`).join("");
+        prevButton.disabled = currentStep === 0;
+        nextButton.disabled = currentStep === flow.steps.length - 1;
+      }
+
+      document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+      document.querySelectorAll("[data-node]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll(".city-node").forEach((node) => node.classList.remove("is-highlighted", "is-dimmed"));
+        showNode(button.dataset.node);
+      }));
+      document.querySelectorAll("[data-flow]").forEach((button) => button.addEventListener("click", () => {
+        currentFlow = button.dataset.flow;
+        currentStep = 0;
+        document.querySelectorAll("[data-flow]").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.flow === currentFlow)));
+        renderFlow();
+      }));
+      prevButton.addEventListener("click", () => { if (currentStep > 0) { currentStep -= 1; renderFlow(); } });
+      nextButton.addEventListener("click", () => { if (currentStep < flows[currentFlow].steps.length - 1) { currentStep += 1; renderFlow(); } });
+
+      setView(currentView);
+      showNode(currentNode);
+      renderFlow();
+    })();
+  </script>
+</body>
+</html>
