@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-current_phase_name: listing-image-management
+current_phase: 08
+current_phase_name: marketplace-discovery
 status: verifying
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-08-16T08:48:00.000Z"
+stopped_at: Completed 08-01-PLAN.md; manual responsive verification remains
+last_updated: "2026-08-16T18:02:00.000Z"
 last_activity: 2026-08-16
-last_activity_desc: Completed quick task 260816-jrk: beginner-friendly interactive architecture city explainer
+last_activity_desc: Completed Phase 08 marketplace discovery implementation; manual responsive verification remains
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 6
-  total_plans: 14
-  completed_plans: 11
+  total_plans: 12
+  completed_plans: 12
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: `.planning/PROJECT.md` and `.planning/ROADMAP.md`.
 
 **Core value:** A visitor can discover two-wheelers, and an authenticated user can publish a listing with the key details needed to start a sale.
-**Current focus:** Phase 06 — listing-image-management
+**Current focus:** Phase 08 — marketplace-discovery
 
 ## Current Position
 
-Phase: 06 (listing-image-management) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
-Last activity: 2026-08-16 — Completed quick task 260816-fka: typed local Indian two-wheeler catalog and cascading listing-form selects
+Phase: 08 (marketplace-discovery) — VERIFYING
+Plan: 1 of 1
+Status: Automated checks complete — manual responsive verification remains
+Last activity: 2026-08-16 — Completed Phase 08 marketplace discovery implementation
 
-Progress: [████████░░] 79%
+Progress: [█████████░] 90%
 
 ## Existing implementation context
 
@@ -72,6 +72,7 @@ Progress: [████████░░] 79%
 - [Phase ?]: Parse structured Edge Function non-2xx bodies from FunctionsHttpError context before generic SDK fallback.
 - [Phase ?]: Project seller image guidance and edit messaging from validated settings and authoritative lifecycle status.
 - [Phase ?]: Restore images.required=false locally and hosted after proving both publication modes.
+- Phase 8 added: Marketplace Discovery
 
 ## Risks and open decisions
 
@@ -87,7 +88,7 @@ Progress: [████████░░] 79%
 | Railway/FastAPI deployment | Supabase covers MVP backend needs |
 | Image upload pipeline | Stock placeholder is sufficient initially |
 | Seller dashboard | CRUD matters; dedicated management UI can follow |
-| Search, filters, radius queries | Discovery sophistication after core loop validation |
+| Radius queries | Discovery sophistication after core loop validation |
 | Moderation and trust features | Need marketplace usage signal first |
 | Production hosting and smoke test | Explicitly deferred by the user on 2026-07-30 |
 
@@ -101,6 +102,13 @@ Progress: [████████░░] 79%
 | 260816-iv0 | Make offer decisions reversible and refresh the chat unread badge | 2026-08-16 | 067f8e3 | [260816-iv0-make-offer-decisions-reversible-and-refr](./quick/260816-iv0-make-offer-decisions-reversible-and-refr/) |
 | 260816-nfo | Resolve localhost negotiation runtime errors: apply schema migration, guard invalid conversation IDs, and format Supabase errors | 2026-08-16 | 746ee6d | [260816-nfo-resolve-localhost-negotiation-runtime-er](./quick/260816-nfo-resolve-localhost-negotiation-runtime-er/) |
 | 260816-jrk | Create beginner-friendly interactive architecture city explainer | 2026-08-16 | 9f8a4f8 | [260816-jrk-create-a-beginner-friendly-interactive-s](./quick/260816-jrk-create-a-beginner-friendly-interactive-s/) |
+| 260816-o6f | Hide homepage hero for signed-in users and show listings instead | 2026-08-16 | pending | [260816-o6f-hide-homepage-hero-for-signed-in-users-a](./quick/260816-o6f-hide-homepage-hero-for-signed-in-users-a/) |
+| 260816-px4 | Cache and stabilize marketplace filter facets | 2026-08-16 | pending | [260816-px4-fix-facet-loading-performance](./quick/260816-px4-fix-facet-loading-performance/) |
+| 260816-qhm | Fix discovery filter grid layout | 2026-08-16 | pending | [260816-qhm-fix-discovery-filter-grid](./quick/260816-qhm-fix-discovery-filter-grid/) |
+| 260816-qka | Tighten marketplace discovery layout | 2026-08-16 | pending | [260816-qka-tighten-discovery-layout](./quick/260816-qka-tighten-discovery-layout/) |
+| 260816-r6b | Simplify discovery filter chrome | 2026-08-16 | pending | [260816-r6b-simplify-discovery-filter-chrome](./quick/260816-r6b-simplify-discovery-filter-chrome/) |
+| 260816-r7k | Replace owner filter with range sliders | 2026-08-16 | pending | [260816-r7k-replace-owner-filter-with-ranges](./quick/260816-r7k-replace-owner-filter-with-ranges/) |
+| 260816-rvu | Fix dual-range handle interaction | 2026-08-16 | pending | [260816-rvu-fix-dual-range-handles](./quick/260816-rvu-fix-dual-range-handles/) |
 
 ## Session continuity
 

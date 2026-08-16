@@ -27,7 +27,6 @@ export default function HomePage() {
       <section id="listings" className="shell feed-section">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Marketplace</p>
             <h2>Fresh listings</h2>
           </div>
           <Link href="/sell" className="inline-link">List a vehicle →</Link>

@@ -119,7 +119,7 @@ Plans:
 
 ## Explicitly Deferred
 
-Production web hosting and production-origin smoke testing are explicitly deferred by the user. Seller dashboards, photo uploads and galleries, advanced search/filtering, PostGIS radius search, messaging/contact, moderation, trust features, and AI capabilities remain post-MVP decisions.
+Production web hosting and production-origin smoke testing are explicitly deferred by the user. Seller dashboards, PostGIS radius search, messaging/contact, moderation, trust features, and AI capabilities remain post-MVP decisions.
 
 ### Phase 6: Listing image management
 
@@ -148,6 +148,17 @@ Plans:
 Plans:
 
 - [ ] TBD (run /gsd-plan-phase 7 to break down)
+
+### Phase 8: Marketplace Discovery
+
+**Goal:** Visitors can discover public listings through URL-backed structured filters, with a shared query architecture ready for future text search.
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 1 plan
+
+Plans:
+
+- [x] 08-01-PLAN.md - Build shared marketplace discovery queries, URL state, and responsive filters
 
 ---
 *Converted to GSD phase format on 2026-07-30 after the Supabase web-MVP realignment.*
