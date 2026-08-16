@@ -15,6 +15,18 @@ export interface ConversationSummary extends ListingConversation {
   latestMessage: NegotiationMessage | null;
 }
 
+export function formatNegotiationError(error: unknown, fallback = "Negotiations could not load.") {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as { message?: unknown; code?: unknown; details?: unknown };
+    if (typeof candidate.message === "string") {
+      const code = typeof candidate.code === "string" ? ` (${candidate.code})` : "";
+      return `${candidate.message}${code}`;
+    }
+  }
+  return fallback;
+}
+
 function displayName(row: { display_name: string | null } | null | undefined) {
   return row?.display_name?.trim() || "Revvbase member";
 }
@@ -31,13 +43,16 @@ export async function loadConversationSummaries(userId: string): Promise<Convers
   const ids = conversations.map((row) => row.id);
   const listingIds = [...new Set(conversations.map((row) => row.listing_id))];
   const personIds = [...new Set(conversations.map((row) => row.buyer_id === userId ? row.seller_id : row.buyer_id))];
-  const [{ data: listings, error: listingsError }, { data: profiles }, { data: messages }, { data: reads }] = await Promise.all([
+  const [{ data: listings, error: listingsError }, { data: profiles, error: profilesError }, { data: messages, error: messagesError }, { data: reads, error: readsError }] = await Promise.all([
     supabase.from("listings").select(listingFields).in("id", listingIds),
     supabase.from("profiles").select("id, display_name").in("id", personIds),
     supabase.from("negotiation_messages").select("id, conversation_id, sender_id, kind, body, offer_amount_inr, offer_status, offer_resolved_by, created_at").in("conversation_id", ids).order("created_at", { ascending: false }),
     supabase.from("conversation_reads").select("conversation_id, user_id, last_read_at").eq("user_id", userId).in("conversation_id", ids),
   ]);
   if (listingsError) throw listingsError;
+  if (profilesError) throw profilesError;
+  if (messagesError) throw messagesError;
+  if (readsError) throw readsError;
   const listingsById = new Map(((listings ?? []) as Listing[]).map((listing) => [listing.id, listing]));
   const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
   const readsByConversation = new Map(((reads ?? []) as ConversationRead[]).map((read) => [read.conversation_id, read]));
